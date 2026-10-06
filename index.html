@@ -1009,10 +1009,42 @@ function openLogSheet(){
 }
 
 /* ---------- views ---------- */
+function startupAccountCard(){
+  var box=h('section',{class:'card group'});
+  var connected=accountConnected();
+
+  if(connected){
+    var status=h('div',{class:'authstatus ok'},h('i'), 'Logged in as @'+authUsername);
+    box.append(
+      h('h2',null,'Your account'),
+      h('p',{class:'muted'},'This device is connected and will use the same Timetracker account on your other devices.'),
+      h('div',{class:'authbox'},
+        h('div',{class:'authrow'},status,h('span',{class:'label'},authUsername)),
+        h('button',{class:'smallbtn press',onclick:async function(){
+          try{await sb.auth.signOut();}catch(e){}
+          location.reload();
+        }},'Switch account')
+      )
+    );
+  }else{
+    box.append(
+      h('h2',null,'Sync across devices'),
+      h('p',{class:'muted'},'Create an account or log in now. You can also continue locally and do this later in Profile.'),
+      h('div',{class:'authactions'},
+        h('button',{class:'smallbtn primary press',onclick:function(){openSyncSheet('create');}},'Create account'),
+        h('button',{class:'smallbtn press',onclick:function(){openSyncSheet('login');}},'Log in')
+      ),
+      h('p',{class:'authhint'},'Your username is shown on the leaderboard. Your password is handled by Supabase Auth.')
+    );
+  }
+  return box;
+}
+
 function viewOnboarding(){
   var subs=activeSubjects();
   var root=h('div',{class:'page onboard'});
   root.append(h('div',{class:'brand'},h('span',{class:'logo bub'}),h('span',null,'Timetracker')));
+  root.append(startupAccountCard());
   root.append(h('div',null,
     h('h1',{class:'ob-title'},'Select your subjects'),
     h('p',{class:'muted ob-sub',style:'margin-top:12px'},'Add everything you are revising. Pick a name and a colour for each one. You can change them any time.')));
