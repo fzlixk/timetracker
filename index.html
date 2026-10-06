@@ -1,6 +1,7 @@
 <!doctype html>
 <html lang="en">
 <head>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Timetracker</title>
@@ -173,6 +174,7 @@ button:focus-visible,input:focus-visible,[tabindex]:focus-visible{outline:3px so
 @keyframes pulse2{0%{box-shadow:0 0 0 0 color-mix(in srgb,var(--c) 60%,transparent)}100%{box-shadow:0 0 0 9px transparent}}
 .val{font-family:var(--display);font-weight:600;font-size:20px;white-space:nowrap;font-variant-numeric:tabular-nums}
 .note{text-align:center;font-size:14px;padding:0 12px}
+.lock-ico{font-size:64px;line-height:1}
 
 /* profile */
 .hero{display:flex;flex-direction:column;align-items:center;gap:14px;text-align:center}
@@ -196,6 +198,19 @@ button:focus-visible,input:focus-visible,[tabindex]:focus-visible{outline:3px so
 .badge b{font-weight:800;font-size:14px}
 .badge.on{opacity:1;filter:none;background:var(--surface);box-shadow:var(--shadow)}
 .sync{font-size:14px}
+
+/* goal slider */
+.gs{display:flex;flex-direction:column;gap:10px;align-items:center}
+.goal-val{text-align:center;color:var(--primary)}
+.slider{-webkit-appearance:none;appearance:none;width:100%;height:22px;border-radius:999px;margin:6px 0;cursor:pointer;
+  background:linear-gradient(90deg,var(--primary) var(--p),var(--surface2) var(--p))}
+.slider::-webkit-slider-thumb{-webkit-appearance:none;width:38px;height:38px;border-radius:50%;border:4px solid var(--surface);
+  background:radial-gradient(circle at 30% 25%,#fff,var(--primary) 70%);box-shadow:0 8px 16px -6px var(--primary);
+  transition:transform .2s cubic-bezier(.34,1.56,.64,1)}
+.slider:active::-webkit-slider-thumb{transform:scale(1.2)}
+.slider::-moz-range-thumb{width:30px;height:30px;border-radius:50%;border:4px solid var(--surface);
+  background:radial-gradient(circle at 30% 25%,#fff,var(--primary) 70%);box-shadow:0 8px 16px -6px var(--primary)}
+.gs-ticks{display:flex;justify-content:space-between;width:100%;font-size:13px;color:var(--muted);font-weight:800}
 
 /* onboarding */
 .onboard{padding-top:34px;gap:22px}
@@ -250,13 +265,16 @@ button:focus-visible,input:focus-visible,[tabindex]:focus-visible{outline:3px so
 <script>
 (function(){
 'use strict';
-
+var SB_URL='https://sudkoqgqjuxajwnunynz.supabase.co/rest/v1/';
+var SB_KEY='sb_publishable_OtR7jt2fcs1LwWVH-LCzhA_62gz34ll';
+var sb=window.supabase?window.supabase.createClient(SB_URL,SB_KEY):null;
 /* ---------- constants & tiny helpers ---------- */
 var PALETTE=[['#FF6B81','Coral'],['#FF9F43','Orange'],['#FFD43B','Sunshine'],['#94D82D','Lime'],['#20C997','Mint'],
              ['#4DABF7','Sky'],['#5C7CFA','Blue'],['#9775FA','Violet'],['#F06595','Pink'],['#6C7A9C','Slate']];
 var COLORS=PALETTE.map(function(p){return p[0];});
 var EMOJIS=['😀','😎','🤓','🦊','🐼','🐯','🐸','🦄','🐙','🦉','🚀','🌟','🍀','🎧','📚','🔥'];
-var GOALS=[30,60,120,180,240];
+var GOAL_MIN=15,GOAL_MAX=360;
+var BOARD_OPEN_HOUR=0;
 var MAX_SESSION=8*3600;
 var LS_KEY='timetracker.state.v1';
 var INK='#1F2547';
@@ -345,6 +363,13 @@ function shortFmt(s){
   return (s/3600).toFixed(1).replace(/\.0$/,'')+'h';
 }
 
+/* leaderboard lock: closed until 8pm local time, open until midnight, repeats daily */
+function boardOpen(){return new Date().getHours()>=BOARD_OPEN_HOUR;}
+function untilOpen(){
+  var n=new Date(),t=new Date(n);t.setHours(BOARD_OPEN_HOUR,0,0,0);
+  return fmtClock((t-n)/1000);
+}
+
 /* ---------- state ---------- */
 function defaults(){
   return {v:1,onboarded:false,profile:{name:'',emoji:EMOJIS[0],color:COLORS[6],goal:120},subjects:[],log:{},timer:null,selected:null,updatedAt:0};
@@ -354,7 +379,8 @@ function normalize(o){
   if(!o||typeof o!=='object') return d;
   var p=(o.profile&&typeof o.profile==='object')?o.profile:{};
   d.onboarded=!!o.onboarded;
-  d.profile={name:str(p.name,20),emoji:str(p.emoji,8)||d.profile.emoji,color:safeColor(p.color)||d.profile.color,goal:GOALS.indexOf(p.goal)>=0?p.goal:120};
+  d.profile={name:str(p.name,20),emoji:str(p.emoji,8)||d.profile.emoji,color:safeColor(p.color)||d.profile.color,
+    goal:(typeof p.goal==='number'&&p.goal>=GOAL_MIN&&p.goal<=480)?Math.round(p.goal):120};
   d.subjects=(Array.isArray(o.subjects)?o.subjects:[]).filter(function(s){return s&&typeof s.id==='string'&&typeof s.name==='string';})
     .map(function(s){return {id:s.id.slice(0,40),name:s.name.slice(0,24),color:safeColor(s.color)||COLORS[9],archived:!!s.archived};});
   var log={};
@@ -467,8 +493,18 @@ function remoteSave(){
   var lb=lbDoc(),lbs=JSON.stringify(lb);
   return (async function(){
     try{
-      if(st!==lastState){await DB.doc('data/users/'+UID+'/state').set(snapshot);lastState=st;}
-      if(lbs!==lastLb){await DB.doc('lb/'+UID).set(Object.assign({},lb,{updatedAt:Date.now()}));lastLb=lbs;}
+      if(st!==lastState){
+  var r1=await sb.from('tt_state').upsert({user_id:UID,state:snapshot,updated_at:new Date().toISOString()});
+  if(r1.error) throw r1.error;
+  lastState=st;
+}
+if(lbs!==lastLb){
+  var r2=await sb.from('tt_board').upsert({user_id:UID,name:lb.name,emoji:lb.emoji,color:lb.color,
+    days:lb.days,total:Math.round(lb.total),studying:lb.studying,updated_at:new Date().toISOString()});
+  if(r2.error) throw r2.error;
+  lastLb=lbs;
+}
+setSync('synced');
       setSync('synced');
     }catch(e){
       setSync(e&&e.code==='invalid_argument'?'readonly':'error');
@@ -496,36 +532,39 @@ function setLive(s){
 }
 
 async function initRemote(){
-  var c=window.claude;
-  if(!c||typeof c.use!=='function') return;
-  var db=null,user=null;
-  try{var r=await Promise.all([c.use('db'),c.use('user')]);db=r[0];user=r[1];}catch(e){}
-  if(user){
-    try{var me=await user.me();UID=me.id||null;viewerName=(me.name||'').trim().split(/\s+/)[0]||'';}catch(e){}
-    try{var cw=await user.can('data.write');canWrite=cw!==false;}catch(e){}
-  }
-  if(!db){return;}
-  DB=db;
-  if(UID){
-    try{
-      var snap=await DB.doc('data/users/'+UID+'/state').get();
-      if(snap.exists){
-        var remote=normalize(snap.data());
-        if(remote.updatedAt>S.updatedAt){S=remote;localSave();}
-      }
-    }catch(e){}
-  }
-  if(!S.onboarded&&!S.profile.name&&viewerName) S.profile.name=viewerName.slice(0,20);
+  if(!sb) return;
   try{
-    DB.collection('lb').onSnapshot(function(snap){
-      var m=new Map();
-      snap.docs.forEach(function(d){if(d.exists) m.set(d.id,d.data());});
-      lbDocs=m;setLive('live');
-      if(tab==='board'&&S.onboarded) renderLbList();
-    },function(){setLive('offline');});
+    var s=await sb.auth.getSession(),session=s.data.session;
+    if(!session){
+      var a=await sb.auth.signInAnonymously();
+      if(a.error) throw a.error;
+      session=a.data.session;
+    }
+    UID=session.user.id;DB=sb;
+  }catch(e){return;}
+  try{
+    var r=await sb.from('tt_state').select('state').eq('user_id',UID).maybeSingle();
+    if(r.data&&r.data.state){
+      var remote=normalize(r.data.state);
+      if(remote.updatedAt>S.updatedAt){S=remote;localSave();}
+    }
   }catch(e){}
+  await loadBoard();
+  sb.channel('tt_board_live')
+    .on('postgres_changes',{event:'*',schema:'public',table:'tt_board'},function(){loadBoard();})
+    .subscribe(function(st){setLive(st==='SUBSCRIBED'?'live':'offline');});
   render();
   if(S.onboarded) scheduleSave(true);
+}
+async function loadBoard(){
+  var r=await sb.from('tt_board').select('*').order('updated_at',{ascending:false}).limit(200);
+  if(r.error||!r.data) return;
+  var m=new Map();
+  r.data.forEach(function(row){
+    m.set(row.user_id,{name:row.name,emoji:row.emoji,color:row.color,days:row.days,total:row.total,studying:row.studying});
+  });
+  lbDocs=m;
+  if(tab==='board'&&S.onboarded&&boardOpen()) renderLbList();
 }
 
 /* ---------- toast, sheets, bubbles ---------- */
@@ -579,6 +618,19 @@ function seg(labels,idx,onPick){
     }},label));
   });
   return el;
+}
+
+/* daily goal slider */
+function goalSlider(){
+  var val=h('p',{class:'big goal-val'},fmt(S.profile.goal*60));
+  var r=h('input',{type:'range',class:'slider',min:GOAL_MIN,max:GOAL_MAX,step:15,value:S.profile.goal,'aria-label':'Daily revision goal'});
+  function paint(){
+    r.style.setProperty('--p',((r.value-GOAL_MIN)/(GOAL_MAX-GOAL_MIN)*100)+'%');
+    val.textContent=fmt(r.value*60);
+  }
+  r.addEventListener('input',function(){S.profile.goal=+r.value;paint();touch();});
+  paint();
+  return h('div',{class:'gs'},val,r,h('div',{class:'gs-ticks'},h('span',null,'15m'),h('span',null,'6h')));
 }
 
 /* ---------- timer actions ---------- */
@@ -652,9 +704,13 @@ function updateLive(){
     var gt=$('.goal-text');if(gt) gt.textContent=goalText(t2);
   }
 }
+var lastOpen=boardOpen();
 setInterval(function(){
   updateLive();
-  if(tab==='board'&&S.onboarded&&++lbTick%15===0) renderLbList();
+  var o=boardOpen();
+  if(o!==lastOpen){lastOpen=o;if(tab==='board'&&S.onboarded) render();}
+  var lc=$('#lockCount');if(lc) lc.textContent=untilOpen();
+  if(tab==='board'&&S.onboarded&&o&&++lbTick%15===0) renderLbList();
 },1000);
 document.addEventListener('visibilitychange',function(){if(!document.hidden) updateLive();});
 
@@ -754,6 +810,8 @@ function viewOnboarding(){
   popId=null;
   wrap.append(h('button',{class:'addb'+(subs.length?'':' big'),onclick:function(){openSubjectSheet();}},icon('plus',subs.length?20:26),'Add subject'));
   root.append(wrap);
+  root.append(h('div',{class:'card group'},h('h2',null,'Daily revision goal'),
+    h('p',{class:'muted'},'Slide to choose how long you want to revise each day.'),goalSlider()));
   var nameInput=h('input',{class:'field',type:'text',maxlength:20,placeholder:'Your name',value:S.profile.name,'aria-label':'Your name',autocomplete:'off'});
   nameInput.addEventListener('input',function(){S.profile.name=nameInput.value.slice(0,20);localSave();});
   root.append(h('div',{class:'card group'},h('h2',null,'What should we call you?'),h('p',{class:'muted'},'This is the name friends see on the leaderboard.'),nameInput));
@@ -903,8 +961,17 @@ function entryValue(e){
 }
 function viewBoard(){
   var root=h('div',{class:'page'});
+  var open=boardOpen();
   root.append(h('header',{class:'top'},h('h1',null,'Leaderboard'),
-    h('span',{class:'livepill'+(liveState==='live'?' live':''),id:'livepill'},h('i'),liveState==='live'?'Live':'Offline')));
+    open?h('span',{class:'livepill'+(liveState==='live'?' live':''),id:'livepill'},h('i'),liveState==='live'?'Live':'Offline'):null));
+  if(!open){
+    root.append(h('section',{class:'card timer-card'},
+      h('div',{class:'lock-ico','aria-hidden':'true'},'🔒'),
+      h('h2',null,'Board opens at 8pm'),
+      h('p',{class:'muted'},'Keep revising. Standings are revealed every evening, when the next cycle begins.'),
+      h('p',{class:'clock',id:'lockCount',role:'timer','aria-label':'Time until the board opens'},untilOpen())));
+    return root;
+  }
   root.append(seg(['Today','This week','All time'],lbPeriod,function(i){lbPeriod=i;renderLbList();}));
   root.append(h('div',{class:'lblist',id:'lbList'}));
   root.append(h('p',{class:'muted note',id:'lbNote'}));
@@ -970,10 +1037,7 @@ function viewProfile(){
       return h('button',{class:'sw bub press',role:'radio','aria-checked':on,'aria-label':p[1],vars:bubVars(p[0]),onclick:function(){S.profile.color=p[0];popAvatar=true;touch();render();}},on?icon('check',22):null);
     }))));
 
-  root.append(h('section',{class:'card group'},h('h2',null,'Daily goal'),
-    h('div',{class:'qrow',role:'group','aria-label':'Daily goal'},GOALS.map(function(g){
-      return h('button',{class:'qchip press','aria-pressed':g===S.profile.goal,onclick:function(){S.profile.goal=g;touch();render();}},fmt(g*60));
-    }))));
+  root.append(h('section',{class:'card group'},h('h2',null,'Daily goal'),goalSlider()));
 
   var total=totalSecs(),best=bestStreak();
   var badges=[['🌱','First step','Log your first session',total>0],['⏳','One hour','1 hour revised',total>=3600],
@@ -999,7 +1063,7 @@ function openResetSheet(){
           closeSheet();
           S=defaults();localSave();tab='home';lastState='';lastLb='';
           if(DB&&UID&&canWrite){
-            try{await DB.doc('data/users/'+UID+'/state').delete();await DB.doc('lb/'+UID).delete();}catch(e){}
+            try{await sb.from('tt_state').delete().eq('user_id',UID);await sb.from('tt_board').delete().eq('user_id',UID);}catch(e){}
           }
           render(true);toast('All data deleted');
         }},'Delete everything')));
@@ -1008,7 +1072,6 @@ function openResetSheet(){
 
 /* ---------- boot ---------- */
 buildNav();
-if(!S.onboarded&&!S.profile.name){/* name is filled in once the viewer is known */}
 render();
 initRemote();
 })();
