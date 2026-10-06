@@ -199,6 +199,16 @@ button:focus-visible,input:focus-visible,[tabindex]:focus-visible{outline:3px so
 .badge.on{opacity:1;filter:none;background:var(--surface);box-shadow:var(--shadow)}
 .sync{font-size:14px}
 
+/* account / sync */
+.authbox{display:flex;flex-direction:column;gap:12px;padding:16px;border-radius:24px;background:var(--surface2)}
+.authrow{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.authstatus{display:flex;align-items:center;gap:9px;font-weight:800}
+.authstatus i{width:10px;height:10px;border-radius:50%;background:var(--muted);flex:none}
+.authstatus.ok i{background:var(--live);box-shadow:0 0 0 5px color-mix(in srgb,var(--live) 16%,transparent)}
+.smallbtn{padding:11px 16px;border-radius:999px;background:var(--surface);font-weight:800;box-shadow:0 8px 16px -12px rgba(40,50,160,.5)}
+.smallbtn.primary{background:var(--primary);color:var(--primary-ink)}
+.authhint{font-size:13px;color:var(--muted);font-weight:700}
+
 /* goal slider */
 .gs{display:flex;flex-direction:column;gap:10px;align-items:center}
 .goal-val{text-align:center;color:var(--primary)}
@@ -265,7 +275,7 @@ button:focus-visible,input:focus-visible,[tabindex]:focus-visible{outline:3px so
 <script>
 (function(){
 'use strict';
-var SB_URL='https://sudkoqgqjuxajwnunynz.supabase.co/rest/v1/';
+var SB_URL='https://sudkoqgqjuxajwnunynz.supabase.co';
 var SB_KEY='sb_publishable_OtR7jt2fcs1LwWVH-LCzhA_62gz34ll';
 var sb=window.supabase?window.supabase.createClient(SB_URL,SB_KEY):null;
 /* ---------- constants & tiny helpers ---------- */
@@ -408,9 +418,9 @@ function localSave(){try{localStorage.setItem(LS_KEY,JSON.stringify(S));}catch(e
 var S=loadLocal();
 var tab='home',lbPeriod=0,breakRange=0,lbTick=0;
 var popOrb=false,popId=null,popAvatar=false;
-var UID=null,DB=null,canWrite=true,viewerName='';
+var UID=null,DB=null,canWrite=true,viewerName='',isAnonymous=true,authEmail='';
 var lbDocs=new Map();
-var liveState='offline',syncState='local';
+var liveState='offline',syncState='local',authBusy=false;
 
 /* ---------- selectors / computed ---------- */
 function activeSubjects(){return S.subjects.filter(function(s){return !s.archived;});}
@@ -476,6 +486,8 @@ function scheduleSave(immediate){
   clearTimeout(saveTimer);
   saveTimer=setTimeout(remoteSave,immediate?60:900);
 }
+function accountConnected(){return !!(DB&&UID&&!isAnonymous&&authEmail);}
+function redirectUrl(){return window.location.origin+window.location.pathname;}
 function lbDoc(){
   var days={},keys=Object.keys(S.log).sort().slice(-35),total=0;
   keys.forEach(function(k){days[k]=daySecs(k);});
@@ -485,7 +497,7 @@ function lbDoc(){
           studying:sub?{name:sub.name.slice(0,24),color:sub.color,since:S.timer.start}:null};
 }
 function remoteSave(){
-  if(!DB||!UID||!canWrite||!S.onboarded) return Promise.resolve();
+  if(!DB||!UID||!canWrite||!S.onboarded||!accountConnected()) return Promise.resolve();
   if(saving){again=true;return Promise.resolve();}
   saving=true;
   var snapshot=JSON.parse(JSON.stringify(S));
@@ -494,21 +506,21 @@ function remoteSave(){
   return (async function(){
     try{
       if(st!==lastState){
-  var r1=await sb.from('tt_state').upsert({user_id:UID,state:snapshot,updated_at:new Date().toISOString()});
-  if(r1.error) throw r1.error;
-  lastState=st;
-}
-if(lbs!==lastLb){
-  var r2=await sb.from('tt_board').upsert({user_id:UID,name:lb.name,emoji:lb.emoji,color:lb.color,
-    days:lb.days,total:Math.round(lb.total),studying:lb.studying,updated_at:new Date().toISOString()});
-  if(r2.error) throw r2.error;
-  lastLb=lbs;
-}
-setSync('synced');
+        var r1=await sb.from('tt_state').upsert({user_id:UID,state:snapshot,updated_at:new Date().toISOString()});
+        if(r1.error) throw r1.error;
+        lastState=st;
+      }
+      if(lbs!==lastLb){
+        var r2=await sb.from('tt_board').upsert({user_id:UID,name:lb.name,emoji:lb.emoji,color:lb.color,
+          days:lb.days,total:Math.round(lb.total),studying:lb.studying,updated_at:new Date().toISOString()});
+        if(r2.error) throw r2.error;
+        lastLb=lbs;
+      }
       setSync('synced');
     }catch(e){
-      setSync(e&&e.code==='invalid_argument'?'readonly':'error');
-      if(e&&e.code==='invalid_argument') canWrite=false;
+      console.error('Timetracker sync error:',e);
+      setSync(e&&e.code==='42501'?'readonly':'error');
+      if(e&&e.code==='42501') canWrite=false;
     }
     saving=false;
     if(again){again=false;remoteSave();}
@@ -517,55 +529,188 @@ setSync('synced');
 function setSync(s){
   syncState=s;
   var el=$('#syncNote');if(el) el.textContent=syncText();
+  var as=$('#authStatusText');
+  if(as){as.textContent=accountStatusText();as.className='authstatus'+(accountConnected()?' ok':'');}
+  var ae=$('#authEmail');if(ae) ae.textContent=accountConnected()?authEmail:'';
+  var ah=$('#authHint');if(ah) ah.textContent=accountConnected()?'Your leaderboard entry and revision history sync between devices.':'Your data is currently local to this device. Connect an email to make it follow you to other devices.';
   var n=$('#lbNote');if(n&&tab==='board') renderLbList();
 }
 function syncText(){
   if(!DB||!UID) return 'Saved on this device only.';
-  if(syncState==='readonly'||!canWrite) return 'You have view-only access, so your progress stays on this device and is not on the leaderboard.';
-  if(syncState==='error') return 'Could not sync just now. Your progress is safe on this device and we will retry.';
+  if(isAnonymous) return 'Saved locally on this device. Connect your email to sync this progress across devices.';
+  if(syncState==='readonly'||!canWrite) return 'Your account is connected, but this account cannot write to the leaderboard. Check the Supabase policies.';
+  if(syncState==='error') return 'Could not sync just now. Your local copy is safe and we will retry.';
   return 'Synced. Your progress follows you across devices.';
+}
+function accountStatusText(){
+  if(!DB||!UID) return 'Local only';
+  if(isAnonymous) return 'Local session';
+  return 'Synced account';
 }
 function setLive(s){
   liveState=s;
   var p=$('#livepill');
   if(p){p.className='livepill'+(s==='live'?' live':'');p.lastChild.textContent=s==='live'?'Live':'Offline';}
 }
-
+async function loadRemoteState(){
+  if(!accountConnected()) return;
+  try{
+    var r=await sb.from('tt_state').select('state,updated_at').eq('user_id',UID).maybeSingle();
+    if(r.data&&r.data.state){
+      var remote=normalize(r.data.state);
+      if(remote.updatedAt>S.updatedAt){
+        S=remote;
+        localSave();
+      }
+    }
+  }catch(e){
+    console.error('Timetracker state load error:',e);
+  }
+}
 async function initRemote(){
   if(!sb) return;
   try{
-    var s=await sb.auth.getSession(),session=s.data.session;
+    var s=await sb.auth.getSession(),session=s.data&&s.data.session;
     if(!session){
       var a=await sb.auth.signInAnonymously();
       if(a.error) throw a.error;
       session=a.data.session;
     }
-    UID=session.user.id;DB=sb;
-  }catch(e){return;}
-  try{
-    var r=await sb.from('tt_state').select('state').eq('user_id',UID).maybeSingle();
-    if(r.data&&r.data.state){
-      var remote=normalize(r.data.state);
-      if(remote.updatedAt>S.updatedAt){S=remote;localSave();}
-    }
-  }catch(e){}
+    UID=session.user.id;
+    DB=sb;
+    isAnonymous=!!session.user.is_anonymous;
+    authEmail=session.user.email||'';
+    canWrite=true;
+  }catch(e){
+    console.error('Timetracker auth error:',e);
+    setSync('error');
+    return;
+  }
+
+  await loadRemoteState();
   await loadBoard();
+
   sb.channel('tt_board_live')
     .on('postgres_changes',{event:'*',schema:'public',table:'tt_board'},function(){loadBoard();})
     .subscribe(function(st){setLive(st==='SUBSCRIBED'?'live':'offline');});
+
+  sb.auth.onAuthStateChange(function(event,session){
+    if(!session) return;
+    setTimeout(async function(){
+      var oldUID=UID;
+      var wasAnonymous=isAnonymous;
+
+      UID=session.user.id;
+      DB=sb;
+      isAnonymous=!!session.user.is_anonymous;
+      authEmail=session.user.email||'';
+      canWrite=true;
+
+      if(oldUID!==UID){
+        lastState='';
+        lastLb='';
+        await loadRemoteState();
+        await loadBoard();
+        if(S.onboarded) scheduleSave(true);
+        render();
+        if(accountConnected()) toast('Signed in. Your progress is synced.');
+      }else if(wasAnonymous && !isAnonymous){
+        lastState='';
+        lastLb='';
+        if(S.onboarded) scheduleSave(true);
+        render();
+        toast('Account connected. Your progress is now synced.');
+      }
+
+      setSync(accountConnected()?'synced':'local');
+    },0);
+  });
+
   render();
-  if(S.onboarded) scheduleSave(true);
+  setSync(accountConnected()?'synced':'local');
+  if(accountConnected()&&S.onboarded) scheduleSave(true);
 }
 async function loadBoard(){
+  if(!sb) return;
   var r=await sb.from('tt_board').select('*').order('updated_at',{ascending:false}).limit(200);
   if(r.error||!r.data) return;
   var m=new Map();
   r.data.forEach(function(row){
+    if(!row.user_id) return;
     m.set(row.user_id,{name:row.name,emoji:row.emoji,color:row.color,days:row.days,total:row.total,studying:row.studying});
   });
   lbDocs=m;
   if(tab==='board'&&S.onboarded&&boardOpen()) renderLbList();
 }
+
+/* ---------- account linking / sign-in ---------- */
+function openSyncSheet(){
+  openSheet(function(sheet){
+    var email=h('input',{class:'field',type:'email',inputmode:'email',autocomplete:'email',placeholder:'you@example.com','aria-label':'Email address'});
+    var err=h('p',{class:'err',role:'alert'});
+    var info=h('p',{class:'muted'},isAnonymous
+      ?'Connect this device with your email. Your current progress will stay attached to the same account and can then be opened on another device.'
+      :'Sign in with the email used for your Timetracker account.');
+
+    var connect=h('button',{class:'btn press',onclick:async function(){
+      var value=email.value.trim().toLowerCase();
+      if(!/^\S+@\S+\.\S+$/.test(value)){err.textContent='Enter a valid email address.';email.focus();return;}
+      if(authBusy) return;
+      authBusy=true;connect.disabled=true;signin.disabled=true;err.textContent='';
+      try{
+        if(isAnonymous){
+          var r=await sb.auth.updateUser({email:value});
+          if(r.error) throw r.error;
+          authEmail=value;
+          toast('Check your email to finish connecting this device.');
+          closeSheet();
+        }else{
+          var r2=await sb.auth.signInWithOtp({
+            email:value,
+            options:{emailRedirectTo:redirectUrl(),shouldCreateUser:false}
+          });
+          if(r2.error) throw r2.error;
+          toast('Check your email for the sign-in link.');
+          closeSheet();
+        }
+      }catch(e){
+        console.error('Account connection error:',e);
+        if(e&&e.message&&/already|registered|exists|identity/i.test(e.message)){
+          err.textContent='That email already has an account. Use the other button to sign in to it.';
+        }else{
+          err.textContent=e&&e.message?e.message:'Could not connect your email. Check Supabase Auth settings.';
+        }
+      }finally{
+        authBusy=false;connect.disabled=false;signin.disabled=false;
+      }
+    }},isAnonymous?'Connect this device':'Send sign-in link');
+
+    var signin=h('button',{class:'btn ghost press',onclick:async function(){
+      var value=email.value.trim().toLowerCase();
+      if(!/^\S+@\S+\.\S+$/.test(value)){err.textContent='Enter a valid email address.';email.focus();return;}
+      if(authBusy) return;
+      authBusy=true;connect.disabled=true;signin.disabled=true;err.textContent='';
+      try{
+        var r=await sb.auth.signInWithOtp({
+          email:value,
+          options:{emailRedirectTo:redirectUrl(),shouldCreateUser:false}
+        });
+        if(r.error) throw r.error;
+        toast('Check your email for the sign-in link.');
+        closeSheet();
+      }catch(e){
+        console.error('Sign-in error:',e);
+        err.textContent=e&&e.message?e.message:'Could not send the sign-in link.';
+      }finally{
+        authBusy=false;connect.disabled=false;signin.disabled=false;
+      }
+    }},'I already have an account');
+
+    sheet.append(h('h2',null,'Sync across devices'),info,email,err,connect,signin,
+      h('p',{class:'authhint'},'Use the same email on each device. Your synced account keeps the same leaderboard identity.'));
+  });
+}
+
 
 /* ---------- toast, sheets, bubbles ---------- */
 var toastT;
@@ -1012,9 +1157,10 @@ function renderLbList(){
   }
   var note=$('#lbNote');
   if(note){
-    if(!DB) note.textContent='The live board needs this page to be open in Claude. For now, it shows just you.';
-    else if(!canWrite) note.textContent='You have view-only access, so you are not on the board. Ask the owner for contributor access to join.';
-    else if(list.length<2) note.textContent='You are the only one here so far. Share this page with friends and give them contributor access so they can join.';
+    if(!DB) note.textContent='The live board is unavailable right now. Your time is still saved locally.';
+    else if(isAnonymous) note.textContent='You can see the synced leaderboard, but connect an email in Profile to make your own entry follow you across devices.';
+    else if(!canWrite) note.textContent='Your account is connected, but Supabase is not allowing board writes. Check the table policies.';
+    else if(list.length<2) note.textContent='You are the only synced person here so far. Get someone else to join the leaderboard.';
     else note.textContent='';
   }
 }
@@ -1047,6 +1193,15 @@ function viewProfile(){
     h('div',{class:'badges'},badges.map(function(b){
       return h('div',{class:'badge'+(b[3]?' on':'')},h('span',{class:'be'},b[0]),h('b',null,b[1]),h('span',{class:'muted'},b[2]));
     }))));
+
+  root.append(h('section',{class:'card group'},h('h2',null,'Sync across devices'),
+    h('div',{class:'authbox'},
+      h('div',{class:'authrow'},
+        h('div',{class:'authstatus'+(accountConnected()?' ok':''),id:'authStatusText'},h('i'),accountStatusText()),
+        accountConnected()?h('span',{class:'label',id:'authEmail'},authEmail):h('button',{class:'smallbtn primary press',onclick:openSyncSheet},'Connect email')
+      ),
+      h('p',{class:'authhint',id:'authHint'},accountConnected()?'Your leaderboard entry and revision history sync between devices.':'Your data is currently local to this device. Connect an email to make it follow you to other devices.')
+    )));
 
   root.append(h('section',{class:'card group'},h('h2',null,'Your data'),
     h('p',{class:'muted sync',id:'syncNote'},syncText()),
