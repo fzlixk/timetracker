@@ -8,6 +8,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600&family=Nunito:wght@600;700;800&display=swap" rel="stylesheet">
+<link rel="icon" type="image/png" href="./static.png">
 <style>
 :root{
   color-scheme:light;
@@ -169,9 +170,13 @@ button:focus-visible,input:focus-visible,[tabindex]:focus-visible{outline:3px so
 .nm{font-weight:800;font-size:17px;display:flex;align-items:center;gap:8px;min-width:0}
 .nm>span:first-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .you{font-size:12px;font-weight:800;padding:2px 10px;border-radius:999px;background:var(--primary);color:var(--primary-ink);flex:none}
-.sub{font-size:13px;color:var(--muted);font-weight:700;display:flex;align-items:center;gap:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.sub .ld{width:9px;height:9px;border-radius:50%;background:var(--c);flex:none;animation:pulse2 1.8s ease-out infinite}
-@keyframes pulse2{0%{box-shadow:0 0 0 0 color-mix(in srgb,var(--c) 60%,transparent)}100%{box-shadow:0 0 0 9px transparent}}
+.sub{display:flex;align-items:center;justify-content:flex-start;min-height:18px}
+.status-dot{position:relative;width:14px;height:14px;border-radius:50%;display:inline-block;flex:none}
+.status-dot.revising{background:var(--live);box-shadow:0 0 0 0 rgba(32,201,151,.5);animation:statusPulse 1.8s ease-out infinite}
+.status-dot.idle{background:#9AA0B2}
+.status-dot.recent{background:#FFD43B}
+.status-dot.recent::after{content:"";position:absolute;width:12px;height:12px;border-radius:50%;background:var(--surface);top:-3px;left:4px}
+@keyframes statusPulse{0%{box-shadow:0 0 0 0 rgba(32,201,151,.55)}100%{box-shadow:0 0 0 8px rgba(32,201,151,0)}}
 .val{font-family:var(--display);font-weight:600;font-size:20px;white-space:nowrap;font-variant-numeric:tabular-nums}
 .note{text-align:center;font-size:14px;padding:0 12px}
 .lock-ico{font-size:64px;line-height:1}
@@ -228,8 +233,9 @@ button:focus-visible,input:focus-visible,[tabindex]:focus-visible{outline:3px so
 /* onboarding */
 .onboard{padding-top:34px;gap:22px}
 .brand{display:flex;align-items:center;gap:12px;font-family:var(--display);font-size:24px;font-weight:600}
-.logo{position:relative;width:38px;height:38px;border-radius:50%;--c:var(--primary);--on:#fff;box-shadow:0 10px 18px -10px var(--primary)}
-.logo::after{content:"";position:absolute;width:14px;height:14px;border-radius:50%;right:-5px;top:-3px;background:var(--primary);opacity:.45}
+.logo{position:relative;width:44px;height:44px;border-radius:14px;overflow:hidden;flex:none;background:var(--surface2);box-shadow:0 10px 18px -10px rgba(92,108,255,.65)}
+.logo img{display:block;width:100%;height:100%;object-fit:cover;border-radius:inherit}
+.logo-fallback{display:none}
 .ob-title{font-size:40px;line-height:1.08}
 .ob-sub{max-width:44ch}
 
@@ -368,6 +374,15 @@ function fmt(s){
   var hh=Math.floor(m/60),mm=m%60;
   return mm?hh+'h '+mm+'m':hh+'h';
 }
+function fmtTimer(s){
+  s=Math.max(0,Math.floor(s));
+  var m=Math.floor(s/60),sec=s%60;
+  if(m<60) return sec?m+'m '+sec+'s':m+'m';
+  var hh=Math.floor(m/60),mm=m%60;
+  if(sec&&mm) return hh+'h '+mm+'m '+sec+'s';
+  if(sec) return hh+'h '+sec+'s';
+  return mm?hh+'h '+mm+'m':hh+'h';
+}
 function fmtClock(s){s=Math.max(0,Math.floor(s));return pad(Math.floor(s/3600))+':'+pad(Math.floor(s%3600/60))+':'+pad(s%60);}
 function shortFmt(s){
   if(s<60) return '';
@@ -385,7 +400,7 @@ function untilOpen(){
 
 /* ---------- state ---------- */
 function defaults(){
-  return {v:1,onboarded:false,profile:{name:'',emoji:EMOJIS[0],color:COLORS[6],goal:120},subjects:[],log:{},timer:null,selected:null,updatedAt:0};
+  return {v:1,onboarded:false,profile:{name:'',emoji:EMOJIS[0],color:COLORS[6],goal:120},subjects:[],log:{},timer:null,selected:null,lastStopped:0,updatedAt:0};
 }
 function normalize(o){
   var d=defaults();
@@ -409,6 +424,7 @@ function normalize(o){
   d.log=log;
   d.timer=(o.timer&&typeof o.timer.sid==='string'&&typeof o.timer.start==='number')?{sid:o.timer.sid,start:o.timer.start}:null;
   d.selected=typeof o.selected==='string'?o.selected:null;
+  d.lastStopped=(typeof o.lastStopped==='number'&&o.lastStopped>0)?o.lastStopped:0;
   d.updatedAt=num(o.updatedAt);
   return d;
 }
@@ -499,8 +515,11 @@ function lbDoc(){
   keys.forEach(function(k){days[k]=daySecs(k);});
   Object.keys(S.log).forEach(function(k){total+=daySecs(k);});
   var sub=S.timer?anySubj(S.timer.sid):null;
+  var presence=sub
+    ?{name:sub.name.slice(0,24),color:sub.color,since:S.timer.start,stoppedAt:0}
+    :{name:'',color:S.profile.color,since:0,stoppedAt:(S.lastStopped||0)};
   return {name:(S.profile.name||'Student').slice(0,20),emoji:S.profile.emoji,color:S.profile.color,days:days,total:total,
-          studying:sub?{name:sub.name.slice(0,24),color:sub.color,since:S.timer.start}:null};
+          studying:presence};
 }
 function remoteSave(){
   if(!DB||!UID||!canWrite||!S.onboarded) return Promise.resolve();
@@ -518,8 +537,8 @@ function remoteSave(){
         lastState=st;
       }
 
-      /* Both anonymous and permanent users publish a leaderboard entry. */
-      if(lbs!==lastLb){
+      /* Only permanent accounts appear on the leaderboard. Anonymous sessions never publish entries. */
+      if(accountConnected() && lbs!==lastLb){
         var r2=await sb.from('tt_board').upsert({user_id:UID,name:lb.name,emoji:lb.emoji,color:lb.color,
           days:lb.days,total:Math.round(lb.total),studying:lb.studying,updated_at:new Date().toISOString()});
         if(r2.error) throw r2.error;
@@ -547,7 +566,7 @@ function setSync(s){
 function syncText(){
   if(!DB||!UID) return 'Saved on this device only.';
   if(isAnonymous) return 'Your leaderboard entry is shared live. Create an account to sync your full progress across devices.';
-  if(syncState==='readonly'||!canWrite) return 'Your account is connected, but this account cannot write to the leaderboard. Check the Supabase policies.';
+  if(syncState==='readonly'||!canWrite) return 'Your account is connected, but syncing is unavailable right now.';
   if(syncState==='error') return 'Could not sync just now. Your local copy is safe and we will retry.';
   return 'Synced. Your progress follows you across devices.';
 }
@@ -555,6 +574,9 @@ function accountStatusText(){
   if(!DB||!UID) return 'Local only';
   if(isAnonymous) return 'Local session';
   return 'Synced account';
+}
+function accountDisplayName(){
+  return cleanUsername(authUsername||S.profile.name||'account') || 'account';
 }
 function setLive(s){
   liveState=s;
@@ -666,7 +688,6 @@ function openSyncSheet(mode){
           h('button',{class:'smallbtn primary press',onclick:function(){closeSheet();setTimeout(function(){openSyncSheet('create');},230);}},'Create account'),
           h('button',{class:'smallbtn press',onclick:function(){closeSheet();setTimeout(function(){openSyncSheet('login');},230);}},'Log in')
         ),
-        h('p',{class:'authhint'},'Your password is handled by Supabase Auth. Your username is what other people see on the leaderboard.')
       );
     });
     return;
@@ -795,7 +816,7 @@ function openSyncSheet(mode){
         var msg=e&&e.message?e.message:'Could not complete that request.';
         if(/invalid login credentials/i.test(msg)) msg='Incorrect username or password.';
         else if(/already registered|already exists|duplicate/i.test(msg)) msg='That username is already in use.';
-        else if(/email.*confirm|confirm.*email/i.test(msg)) msg='Turn off Confirm email in Supabase Auth for this version.';
+        else if(/email.*confirm|confirm.*email/i.test(msg)) msg='Please try again.';
         err.textContent=msg;
       }finally{
         authBusy=false;submit.disabled=false;switcher.disabled=false;
@@ -807,8 +828,7 @@ function openSyncSheet(mode){
       h('p',{class:'muted'},isCreate
         ?'Choose a username and password. Your current Timetracker data stays on this account.'
         :'Use the same username and password you used on your other device.'),
-      username,password,confirm,err,submit,switcher,
-      h('p',{class:'authhint'},'For this version, Supabase Auth must have Confirm email turned off. The internal auth email is not displayed publicly.')
+      username,password,confirm,err,submit,switcher
     );
   });
 }
@@ -889,9 +909,11 @@ function startTimer(){
 }
 function stopTimer(){
   if(!S.timer) return;
-  var secs=(Date.now()-S.timer.start)/1000,sid=S.timer.sid,sub=anySubj(sid);
+  var stoppedAt=Date.now();
+  var secs=(stoppedAt-S.timer.start)/1000,sid=S.timer.sid,sub=anySubj(sid);
   var orb=$('.orb'),rect=orb?orb.getBoundingClientRect():null;
   S.timer=null;
+  S.lastStopped=stoppedAt;
   if(secs<5){toast('Too short to count');}
   else{
     if(secs>MAX_SESSION){secs=MAX_SESSION;toast('Timer capped at 8 hours');}
@@ -942,7 +964,8 @@ function updateLive(){
   document.querySelectorAll('[data-since]').forEach(function(el){
     var since=+el.dataset.since;if(!since) return;
     var t=Math.max(0,Math.min((now-since)/1000,MAX_SESSION));
-    el.textContent=('base' in el.dataset)?fmt((+el.dataset.base||0)+t):fmtClock(t);
+    if('timer' in el.dataset) el.textContent=fmtTimer((+el.dataset.base||0)+t);
+    else el.textContent=('base' in el.dataset)?fmt((+el.dataset.base||0)+t):fmtClock(t);
   });
   var f=$('.goal-fill');
   if(f){
@@ -1047,12 +1070,12 @@ function startupAccountCard(){
   var connected=accountConnected();
 
   if(connected){
-    var status=h('div',{class:'authstatus ok'},h('i'), 'Logged in as @'+authUsername);
+    var status=h('div',{class:'authstatus ok'},h('i'), 'Logged in as @'+accountDisplayName());
     box.append(
       h('h2',null,'Your account'),
       h('p',{class:'muted'},'This device is connected and will use the same Timetracker account on your other devices.'),
       h('div',{class:'authbox'},
-        h('div',{class:'authrow'},status,h('span',{class:'label'},authUsername)),
+        h('div',{class:'authrow'},status,h('span',{class:'label'},'@'+accountDisplayName())),
         h('div',{class:'authactions'},
           h('button',{class:'smallbtn press',onclick:async function(){
             try{await sb.auth.signOut();}catch(e){}
@@ -1077,7 +1100,7 @@ function startupAccountCard(){
         h('button',{class:'smallbtn primary press',onclick:function(){openSyncSheet('create');}},'Create account'),
         h('button',{class:'smallbtn press',onclick:function(){openSyncSheet('login');}},'Log in')
       ),
-      h('p',{class:'authhint'},'Your username is shown on the leaderboard. Your password is handled by Supabase Auth.')
+      null
     );
   }
   return box;
@@ -1086,7 +1109,10 @@ function startupAccountCard(){
 function viewOnboarding(){
   var subs=activeSubjects();
   var root=h('div',{class:'page onboard'});
-  root.append(h('div',{class:'brand'},h('span',{class:'logo bub'}),h('span',null,'Timetracker')));
+  root.append(h('div',{class:'brand'},
+    h('span',{class:'logo'},h('img',{src:'./dynamic.gif',alt:'','aria-hidden':'true'})),
+    h('span',null,'Timetracker')
+  ));
   root.append(startupAccountCard());
   root.append(h('div',null,
     h('h1',{class:'ob-title'},'Select your subjects'),
@@ -1130,7 +1156,7 @@ function viewHome(){
   root.append(h('section',{class:'card','aria-label':'Today'},
     h('div',{class:'today-row'},
       h('div',null,h('p',{class:'label'},'Today'),
-        h('p',{class:'big','data-base':daySecs(tk),'data-since':running?S.timer.start:null},fmt(today))),
+        h('p',{class:'big','data-base':daySecs(tk),'data-since':running?S.timer.start:null,'data-timer':running?'1':null},fmtTimer(today))),
       h('div',{class:'streak-pill'},'🔥 '+st+(st===1?' day':' days'))),
     h('div',{class:'goal-track'},h('i',{class:'goal-fill',style:'width:'+Math.min(100,today/(S.profile.goal*60)*100)+'%'})),
     h('p',{class:'muted goal-text'},goalText(today))));
@@ -1144,7 +1170,7 @@ function viewHome(){
         if(S.timer){toast('Stop the timer to switch subject');return;}
         S.selected=s.id;popOrb=true;touch();render();
       }},h('span',{class:'subj-name'},s.name),
-        h('span',{class:'subj-time','data-base':subjectSecsToday(s.id),'data-since':isRun?S.timer.start:null},fmt(subjectSecsToday(s.id)+(isRun?liveSecs():0)))),
+        h('span',{class:'subj-time','data-base':subjectSecsToday(s.id),'data-since':isRun?S.timer.start:null,'data-timer':isRun?'1':null},fmtTimer(subjectSecsToday(s.id)+(isRun?liveSecs():0)))),
       h('button',{class:'subj-edit','aria-label':'Edit '+s.name,onclick:function(){openSubjectSheet(s);}},icon('pencil',16))));
   });
   popId=null;
@@ -1227,8 +1253,11 @@ function myEntry(){
   var tk=dkey(),wk=weekStartKey(),week=0,total=0;
   Object.keys(S.log).forEach(function(k){var s=daySecs(k);total+=s;if(k>=wk&&k<=tk) week+=s;});
   var sub=S.timer?anySubj(S.timer.sid):null;
+  var presence=sub
+    ?{state:'revising',name:sub.name,color:sub.color,since:S.timer.start,stoppedAt:0}
+    :{state:'stopped',name:'',color:S.profile.color,since:0,stoppedAt:(S.lastStopped||0)};
   return {id:UID||'local',me:true,name:S.profile.name||'You',emoji:S.profile.emoji,color:S.profile.color,
-    today:daySecs(tk),week:week,total:total,studying:sub?{name:sub.name,color:sub.color,since:S.timer.start}:null};
+    today:daySecs(tk),week:week,total:total,studying:presence};
 }
 function parseLb(id,d){
   var tk=dkey(),wk=weekStartKey(),today=0,week=0,days=(d&&typeof d.days==='object'&&d.days)?d.days:{};
@@ -1237,16 +1266,32 @@ function parseLb(id,d){
     if(k===tk) today+=v;
     if(k>=wk&&k<=tk) week+=v;
   });
-  var s=d&&d.studying,st=null;
-  if(s&&typeof s.since==='number'&&Date.now()-s.since<12*3600*1000&&s.since<=Date.now()+60000){
-    st={name:str(s.name,24)||'a subject',color:safeColor(s.color)||COLORS[6],since:s.since};
+  var s=d&&d.studying,st=null,stoppedAt=0;
+  if(s&&typeof s.since==='number'&&s.since>0&&Date.now()-s.since<12*3600*1000&&s.since<=Date.now()+60000){
+    st={state:'revising',name:str(s.name,24)||'a subject',color:safeColor(s.color)||COLORS[6],since:s.since,stoppedAt:0};
+  }else if(s&&typeof s.stoppedAt==='number'&&s.stoppedAt>0){
+    stoppedAt=s.stoppedAt;
+    st={state:'stopped',name:'',color:COLORS[6],since:0,stoppedAt:stoppedAt};
   }
   return {id:id,me:false,name:str(d.name,20)||'Student',emoji:str(d.emoji,8)||'🙂',color:safeColor(d.color)||COLORS[6],
     today:today,week:week,total:num(d.total),studying:st};
 }
 function entryValue(e){
   var base=[e.today,e.week,e.total][lbPeriod];
-  return base+(e.studying?Math.max(0,Math.min((Date.now()-e.studying.since)/1000,MAX_SESSION)):0);
+  return base+(e.studying&&e.studying.state==='revising'?Math.max(0,Math.min((Date.now()-e.studying.since)/1000,MAX_SESSION)):0);
+}
+function presenceState(e){
+  if(e.studying&&e.studying.state==='revising') return 'revising';
+  var stopped=e.studying&&typeof e.studying.stoppedAt==='number'?e.studying.stoppedAt:0;
+  if(stopped>0&&Date.now()-stopped<20*60*1000) return 'recent';
+  return 'idle';
+}
+function presenceLabel(state){
+  return state==='revising'?'Revising':state==='recent'?'Stopped less than 20 minutes ago':'Not revising';
+}
+function presenceIcon(e){
+  var state=presenceState(e);
+  return h('span',{class:'status-dot '+state,role:'img','aria-label':presenceLabel(state),title:presenceLabel(state)});
 }
 function viewBoard(){
   var root=h('div',{class:'page'});
@@ -1273,15 +1318,14 @@ function lbRow(e,rank){
     h('div',{class:'rank'+(medal?' medal':'')},medal?['🥇','🥈','🥉'][rank-1]:String(rank)),
     h('div',{class:'av bub',vars:bubVars(e.color)},e.emoji),
     h('div',{class:'who'},
-      h('div',{class:'nm'},h('span',null,e.name),e.me?h('span',{class:'you'},'you'):null),
-      live?h('div',{class:'sub'},h('i',{class:'ld',vars:{'--c':live.color}}),h('span',null,'Studying '+live.name+' '),h('span',{'data-since':live.since},'')):h('div',{class:'sub'},'Not studying now')),
-    h('div',{class:'val','data-base':base,'data-since':live?live.since:null},fmt(base)));
+      h('div',{class:'nm'},h('span',null,e.name),e.me?h('span',{class:'you'},'you'):null,presenceIcon(e))),
+    h('div',{class:'val','data-base':base,'data-since':live&&live.state==='revising'?live.since:null,'data-timer':live&&live.state==='revising'?'1':null},fmtTimer(base)));
 }
 function renderLbList(){
   var box=$('#lbList');if(!box) return;
   var list=[];
   lbDocs.forEach(function(d,id){if(id!==UID) list.push(parseLb(id,d));});
-  list.push(myEntry());
+  if(accountConnected()) list.push(myEntry());
   list.sort(function(a,b){return entryValue(b)-entryValue(a)||a.name.localeCompare(b.name);});
   list=list.slice(0,50);
   var prev=new Map();
@@ -1302,8 +1346,8 @@ function renderLbList(){
   var note=$('#lbNote');
   if(note){
     if(!DB) note.textContent='The live board is unavailable right now. Your time is still saved locally.';
-    else if(isAnonymous) note.textContent='Your leaderboard entry is shared live. Create an account in Profile to make your full progress follow you across devices.';
-    else if(!canWrite) note.textContent='Your account is connected, but Supabase is not allowing board writes. Check the table policies.';
+    else if(isAnonymous) note.textContent='Log in or create an account to appear on the leaderboard.';
+    else if(!canWrite) note.textContent='Your account is connected, but syncing is unavailable right now.';
     else if(list.length<2) note.textContent='You are the only synced person here so far. Get someone else to join the leaderboard.';
     else note.textContent='';
   }
@@ -1342,7 +1386,7 @@ function viewProfile(){
     h('div',{class:'authbox'},
       h('div',{class:'authrow'},
         h('div',{class:'authstatus'+(accountConnected()?' ok':''),id:'authStatusText'},h('i'),accountStatusText()),
-        accountConnected()?h('span',{class:'label accountname',id:'authEmail'},'@'+authUsername):null
+        accountConnected()?h('span',{class:'label accountname',id:'authEmail'},'@'+accountDisplayName()):null
       ),
       accountConnected()?h('button',{class:'smallbtn press',onclick:async function(){
         try{await sb.auth.signOut();}catch(e){}
