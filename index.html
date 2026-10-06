@@ -208,6 +208,9 @@ button:focus-visible,input:focus-visible,[tabindex]:focus-visible{outline:3px so
 .smallbtn{padding:11px 16px;border-radius:999px;background:var(--surface);font-weight:800;box-shadow:0 8px 16px -12px rgba(40,50,160,.5)}
 .smallbtn.primary{background:var(--primary);color:var(--primary-ink)}
 .authhint{font-size:13px;color:var(--muted);font-weight:700}
+.authactions{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.authactions .smallbtn{width:100%;text-align:center}
+.accountname{font-family:var(--display);font-size:18px;font-weight:600}
 
 /* goal slider */
 .gs{display:flex;flex-direction:column;gap:10px;align-items:center}
@@ -284,7 +287,7 @@ var PALETTE=[['#FF6B81','Coral'],['#FF9F43','Orange'],['#FFD43B','Sunshine'],['#
 var COLORS=PALETTE.map(function(p){return p[0];});
 var EMOJIS=['😀','😎','🤓','🦊','🐼','🐯','🐸','🦄','🐙','🦉','🚀','🌟','🍀','🎧','📚','🔥'];
 var GOAL_MIN=15,GOAL_MAX=360;
-var BOARD_OPEN_HOUR=0;
+var BOARD_OPEN_HOUR=20;
 var MAX_SESSION=8*3600;
 var LS_KEY='timetracker.state.v1';
 var INK='#1F2547';
@@ -418,7 +421,7 @@ function localSave(){try{localStorage.setItem(LS_KEY,JSON.stringify(S));}catch(e
 var S=loadLocal();
 var tab='home',lbPeriod=0,breakRange=0,lbTick=0;
 var popOrb=false,popId=null,popAvatar=false;
-var UID=null,DB=null,canWrite=true,viewerName='',isAnonymous=true,authEmail='';
+var UID=null,DB=null,canWrite=true,viewerName='',isAnonymous=true,authEmail='',authUsername='';
 var lbDocs=new Map();
 var liveState='offline',syncState='local',authBusy=false;
 
@@ -486,8 +489,11 @@ function scheduleSave(immediate){
   clearTimeout(saveTimer);
   saveTimer=setTimeout(remoteSave,immediate?60:900);
 }
-function accountConnected(){return !!(DB&&UID&&!isAnonymous&&authEmail);}
+function accountConnected(){return !!(DB&&UID&&!isAnonymous&&authUsername);}
 function redirectUrl(){return window.location.origin+window.location.pathname;}
+function cleanUsername(v){return String(v||'').trim().toLowerCase();}
+function validUsername(v){return /^[a-z0-9_]{3,20}$/.test(v);}
+function usernameEmail(v){return cleanUsername(v)+'@accounts.ttrevise.app';}
 function lbDoc(){
   var days={},keys=Object.keys(S.log).sort().slice(-35),total=0;
   keys.forEach(function(k){days[k]=daySecs(k);});
@@ -497,7 +503,7 @@ function lbDoc(){
           studying:sub?{name:sub.name.slice(0,24),color:sub.color,since:S.timer.start}:null};
 }
 function remoteSave(){
-  if(!DB||!UID||!canWrite||!S.onboarded||!accountConnected()) return Promise.resolve();
+  if(!DB||!UID||!canWrite||!S.onboarded) return Promise.resolve();
   if(saving){again=true;return Promise.resolve();}
   saving=true;
   var snapshot=JSON.parse(JSON.stringify(S));
@@ -505,11 +511,14 @@ function remoteSave(){
   var lb=lbDoc(),lbs=JSON.stringify(lb);
   return (async function(){
     try{
-      if(st!==lastState){
+      /* Permanent accounts sync their full revision state across devices. */
+      if(accountConnected() && st!==lastState){
         var r1=await sb.from('tt_state').upsert({user_id:UID,state:snapshot,updated_at:new Date().toISOString()});
         if(r1.error) throw r1.error;
         lastState=st;
       }
+
+      /* Both anonymous and permanent users publish a leaderboard entry. */
       if(lbs!==lastLb){
         var r2=await sb.from('tt_board').upsert({user_id:UID,name:lb.name,emoji:lb.emoji,color:lb.color,
           days:lb.days,total:Math.round(lb.total),studying:lb.studying,updated_at:new Date().toISOString()});
@@ -537,7 +546,7 @@ function setSync(s){
 }
 function syncText(){
   if(!DB||!UID) return 'Saved on this device only.';
-  if(isAnonymous) return 'Saved locally on this device. Connect your email to sync this progress across devices.';
+  if(isAnonymous) return 'Your leaderboard entry is shared live. Create an account to sync your full progress across devices.';
   if(syncState==='readonly'||!canWrite) return 'Your account is connected, but this account cannot write to the leaderboard. Check the Supabase policies.';
   if(syncState==='error') return 'Could not sync just now. Your local copy is safe and we will retry.';
   return 'Synced. Your progress follows you across devices.';
@@ -580,6 +589,7 @@ async function initRemote(){
     DB=sb;
     isAnonymous=!!session.user.is_anonymous;
     authEmail=session.user.email||'';
+    authUsername=cleanUsername(session.user.user_metadata&&session.user.user_metadata.username||'');
     canWrite=true;
   }catch(e){
     console.error('Timetracker auth error:',e);
@@ -604,6 +614,7 @@ async function initRemote(){
       DB=sb;
       isAnonymous=!!session.user.is_anonymous;
       authEmail=session.user.email||'';
+      authUsername=cleanUsername(session.user.user_metadata&&session.user.user_metadata.username||'');
       canWrite=true;
 
       if(oldUID!==UID){
@@ -644,70 +655,128 @@ async function loadBoard(){
 }
 
 /* ---------- account linking / sign-in ---------- */
-function openSyncSheet(){
-  openSheet(function(sheet){
-    var email=h('input',{class:'field',type:'email',inputmode:'email',autocomplete:'email',placeholder:'you@example.com','aria-label':'Email address'});
-    var err=h('p',{class:'err',role:'alert'});
-    var info=h('p',{class:'muted'},isAnonymous
-      ?'Connect this device with your email. Your current progress will stay attached to the same account and can then be opened on another device.'
-      :'Sign in with the email used for your Timetracker account.');
+function openSyncSheet(mode){
+  mode=mode||'menu';
+  if(mode==='menu'){
+    openSheet(function(sheet){
+      sheet.append(
+        h('h2',null,'Sync across devices'),
+        h('p',{class:'muted'},'Create an account on this device, then use the same username and password on your other device.'),
+        h('div',{class:'authactions'},
+          h('button',{class:'smallbtn primary press',onclick:function(){closeSheet();setTimeout(function(){openSyncSheet('create');},230);}},'Create account'),
+          h('button',{class:'smallbtn press',onclick:function(){closeSheet();setTimeout(function(){openSyncSheet('login');},230);}},'Log in')
+        ),
+        h('p',{class:'authhint'},'Your password is handled by Supabase Auth. Your username is what other people see on the leaderboard.')
+      );
+    });
+    return;
+  }
 
-    var connect=h('button',{class:'btn press',onclick:async function(){
-      var value=email.value.trim().toLowerCase();
-      if(!/^\S+@\S+\.\S+$/.test(value)){err.textContent='Enter a valid email address.';email.focus();return;}
-      if(authBusy) return;
-      authBusy=true;connect.disabled=true;signin.disabled=true;err.textContent='';
+  openSheet(function(sheet){
+    var isCreate=mode==='create';
+    var username=h('input',{class:'field',type:'text',maxlength:20,placeholder:'Username',autocomplete:'username','aria-label':'Username',spellcheck:'false'});
+    var password=h('input',{class:'field',type:'password',maxlength:72,placeholder:'Password',autocomplete:isCreate?'new-password':'current-password','aria-label':'Password'});
+    var confirm=isCreate?h('input',{class:'field',type:'password',maxlength:72,placeholder:'Confirm password',autocomplete:'new-password','aria-label':'Confirm password'}):null;
+    var err=h('p',{class:'err',role:'alert'});
+
+    function formUsername(){
+      var u=cleanUsername(username.value);
+      if(!validUsername(u)){
+        err.textContent='Username must be 3-20 characters using letters, numbers or _.';
+        username.focus();return null;
+      }
+      if(String(password.value).length<6){
+        err.textContent='Password must be at least 6 characters.';
+        password.focus();return null;
+      }
+      if(isCreate&&password.value!==confirm.value){
+        err.textContent='The passwords do not match.';
+        confirm.focus();return null;
+      }
+      return u;
+    }
+
+    var switcher=h('button',{class:'btn ghost press',onclick:function(){
+      closeSheet();
+      setTimeout(function(){openSyncSheet(isCreate?'login':'create');},230);
+    }},isCreate?'I already have an account':'Create a new account');
+
+    var submit=h('button',{class:'btn press',onclick:async function(){
+      var u=formUsername();
+      if(!u||authBusy) return;
+      authBusy=true;submit.disabled=true;switcher.disabled=true;err.textContent='';
+
       try{
-        if(isAnonymous){
-          var r=await sb.auth.updateUser({email:value});
+        if(isCreate){
+          if(!isAnonymous){
+            err.textContent='This device is already signed into an account.';
+            return;
+          }
+
+          var r=await sb.auth.updateUser({
+            email:usernameEmail(u),
+            password:password.value,
+            data:{username:u}
+          });
           if(r.error) throw r.error;
-          authEmail=value;
-          toast('Check your email to finish connecting this device.');
+          if(!r.data||!r.data.user) throw new Error('Account creation did not return a user.');
+
+          UID=r.data.user.id;
+          DB=sb;
+          isAnonymous=!!r.data.user.is_anonymous;
+          authEmail=r.data.user.email||usernameEmail(u);
+          authUsername=u;
+          canWrite=true;
+          lastState='';lastLb='';
+
+          if(S.onboarded) await remoteSave();
+          render();
           closeSheet();
+          toast('Account created. Your progress is now synced.');
         }else{
-          var r2=await sb.auth.signInWithOtp({
-            email:value,
-            options:{emailRedirectTo:redirectUrl(),shouldCreateUser:false}
+          var r2=await sb.auth.signInWithPassword({
+            email:usernameEmail(u),
+            password:password.value
           });
           if(r2.error) throw r2.error;
-          toast('Check your email for the sign-in link.');
+
+          var session=r2.data.session;
+          if(!session) throw new Error('No session was returned.');
+
+          UID=session.user.id;
+          DB=sb;
+          isAnonymous=!!session.user.is_anonymous;
+          authEmail=session.user.email||usernameEmail(u);
+          authUsername=cleanUsername(session.user.user_metadata&&session.user.user_metadata.username||u);
+          canWrite=true;
+          lastState='';lastLb='';
+
+          await loadRemoteState();
+          await loadBoard();
+          render();
           closeSheet();
+          toast('Logged in as @'+authUsername+'.');
         }
       }catch(e){
-        console.error('Account connection error:',e);
-        if(e&&e.message&&/already|registered|exists|identity/i.test(e.message)){
-          err.textContent='That email already has an account. Use the other button to sign in to it.';
-        }else{
-          err.textContent=e&&e.message?e.message:'Could not connect your email. Check Supabase Auth settings.';
-        }
+        console.error('Username/password auth error:',e);
+        var msg=e&&e.message?e.message:'Could not complete that request.';
+        if(/invalid login credentials/i.test(msg)) msg='Incorrect username or password.';
+        else if(/already registered|already exists|duplicate/i.test(msg)) msg='That username is already in use.';
+        else if(/email.*confirm|confirm.*email/i.test(msg)) msg='Turn off Confirm email in Supabase Auth for this version.';
+        err.textContent=msg;
       }finally{
-        authBusy=false;connect.disabled=false;signin.disabled=false;
+        authBusy=false;submit.disabled=false;switcher.disabled=false;
       }
-    }},isAnonymous?'Connect this device':'Send sign-in link');
+    }},isCreate?'Create account':'Log in');
 
-    var signin=h('button',{class:'btn ghost press',onclick:async function(){
-      var value=email.value.trim().toLowerCase();
-      if(!/^\S+@\S+\.\S+$/.test(value)){err.textContent='Enter a valid email address.';email.focus();return;}
-      if(authBusy) return;
-      authBusy=true;connect.disabled=true;signin.disabled=true;err.textContent='';
-      try{
-        var r=await sb.auth.signInWithOtp({
-          email:value,
-          options:{emailRedirectTo:redirectUrl(),shouldCreateUser:false}
-        });
-        if(r.error) throw r.error;
-        toast('Check your email for the sign-in link.');
-        closeSheet();
-      }catch(e){
-        console.error('Sign-in error:',e);
-        err.textContent=e&&e.message?e.message:'Could not send the sign-in link.';
-      }finally{
-        authBusy=false;connect.disabled=false;signin.disabled=false;
-      }
-    }},'I already have an account');
-
-    sheet.append(h('h2',null,'Sync across devices'),info,email,err,connect,signin,
-      h('p',{class:'authhint'},'Use the same email on each device. Your synced account keeps the same leaderboard identity.'));
+    sheet.append(
+      h('h2',null,isCreate?'Create account':'Log in'),
+      h('p',{class:'muted'},isCreate
+        ?'Choose a username and password. Your current Timetracker data stays on this account.'
+        :'Use the same username and password you used on your other device.'),
+      username,password,confirm,err,submit,switcher,
+      h('p',{class:'authhint'},'For this version, Supabase Auth must have Confirm email turned off. The internal auth email is not displayed publicly.')
+    );
   });
 }
 
@@ -1158,7 +1227,7 @@ function renderLbList(){
   var note=$('#lbNote');
   if(note){
     if(!DB) note.textContent='The live board is unavailable right now. Your time is still saved locally.';
-    else if(isAnonymous) note.textContent='You can see the synced leaderboard, but connect an email in Profile to make your own entry follow you across devices.';
+    else if(isAnonymous) note.textContent='Your leaderboard entry is shared live. Create an account in Profile to make your full progress follow you across devices.';
     else if(!canWrite) note.textContent='Your account is connected, but Supabase is not allowing board writes. Check the table policies.';
     else if(list.length<2) note.textContent='You are the only synced person here so far. Get someone else to join the leaderboard.';
     else note.textContent='';
@@ -1198,9 +1267,16 @@ function viewProfile(){
     h('div',{class:'authbox'},
       h('div',{class:'authrow'},
         h('div',{class:'authstatus'+(accountConnected()?' ok':''),id:'authStatusText'},h('i'),accountStatusText()),
-        accountConnected()?h('span',{class:'label',id:'authEmail'},authEmail):h('button',{class:'smallbtn primary press',onclick:openSyncSheet},'Connect email')
+        accountConnected()?h('span',{class:'label accountname',id:'authEmail'},'@'+authUsername):null
       ),
-      h('p',{class:'authhint',id:'authHint'},accountConnected()?'Your leaderboard entry and revision history sync between devices.':'Your data is currently local to this device. Connect an email to make it follow you to other devices.')
+      accountConnected()?h('button',{class:'smallbtn press',onclick:async function(){
+        try{await sb.auth.signOut();}catch(e){}
+        location.reload();
+      }},'Switch account'):h('div',{class:'authactions'},
+        h('button',{class:'smallbtn primary press',onclick:function(){openSyncSheet('create');}},'Create account'),
+        h('button',{class:'smallbtn press',onclick:function(){openSyncSheet('login');}},'Log in')
+      ),
+      h('p',{class:'authhint',id:'authHint'},accountConnected()?'Your leaderboard entry and revision history syncs to this account.':'Create or log into an account to use the same Timetracker identity on another device.')
     )));
 
   root.append(h('section',{class:'card group'},h('h2',null,'Your data'),
