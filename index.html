@@ -708,9 +708,27 @@ function openSyncSheet(mode){
 
       try{
         if(isCreate){
+          /*
+            A device may still have a permanent Supabase session from an
+            earlier account. Sign it out first, then create a fresh
+            anonymous session and convert that session into the new account.
+            This makes Create account work even after previous testing.
+          */
           if(!isAnonymous){
-            err.textContent='This device is already signed into an account.';
-            return;
+            try{await sb.auth.signOut();}catch(ignore){}
+            UID=null;
+            isAnonymous=true;
+            authEmail='';
+            authUsername='';
+
+            var fresh=await sb.auth.signInAnonymously();
+            if(fresh.error) throw fresh.error;
+            if(!fresh.data||!fresh.data.session) throw new Error('Could not create a new device session.');
+
+            UID=fresh.data.session.user.id;
+            DB=sb;
+            isAnonymous=true;
+            canWrite=true;
           }
 
           var r=await sb.auth.updateUser({
@@ -734,6 +752,21 @@ function openSyncSheet(mode){
           closeSheet();
           toast('Account created. Your progress is now synced.');
         }else{
+          /*
+            Allow login even when this browser is currently attached to a
+            different account. Supabase keeps its auth session separately
+            from localStorage, so clearing localStorage alone is not enough.
+            Sign out the current session before signing into the requested
+            account.
+          */
+          if(accountConnected()){
+            try{await sb.auth.signOut();}catch(ignore2){}
+            UID=null;
+            authEmail='';
+            authUsername='';
+            isAnonymous=false;
+          }
+
           var r2=await sb.auth.signInWithPassword({
             email:usernameEmail(u),
             password:password.value
@@ -1020,10 +1053,20 @@ function startupAccountCard(){
       h('p',{class:'muted'},'This device is connected and will use the same Timetracker account on your other devices.'),
       h('div',{class:'authbox'},
         h('div',{class:'authrow'},status,h('span',{class:'label'},authUsername)),
-        h('button',{class:'smallbtn press',onclick:async function(){
-          try{await sb.auth.signOut();}catch(e){}
-          location.reload();
-        }},'Switch account')
+        h('div',{class:'authactions'},
+          h('button',{class:'smallbtn press',onclick:async function(){
+            try{await sb.auth.signOut();}catch(e){}
+            UID=null;authEmail='';authUsername='';isAnonymous=true;
+            try{
+              var a=await sb.auth.signInAnonymously();
+              if(a.error) throw a.error;
+            }catch(ignore){}
+            render();
+            toast('Signed out. You can now log in to another account.');
+          }},'Switch account'),
+          h('button',{class:'smallbtn press',onclick:function(){openSyncSheet('login');}},'Log in to another'),
+          h('button',{class:'smallbtn press',onclick:function(){openSyncSheet('create');}},'Create new account')
+        )
       )
     );
   }else{
