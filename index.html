@@ -45,7 +45,7 @@ button{font:inherit;color:inherit;border:0;background:none;cursor:pointer;paddin
 
 /* socials */
 .home-actions{display:flex;align-items:center;gap:8px;flex:none}
-.social-dock{display:flex;align-items:center;justify-content:flex-end;gap:8px;max-width:52px;overflow:hidden;transition:max-width .48s cubic-bezier(.22,1,.36,1)}
+.social-dock{display:flex;align-items:center;justify-content:flex-end;gap:8px;max-width:52px;overflow:visible;transition:max-width .48s cubic-bezier(.22,1,.36,1)}
 .social-dock.open{max-width:160px}
 .social-main,.social-mini{width:46px;height:46px;border-radius:50%;display:grid;place-items:center;flex:none;background:var(--surface);box-shadow:var(--shadow)}
 .social-main{background:var(--primary);color:var(--primary-ink)}
@@ -83,7 +83,7 @@ button{font:inherit;color:inherit;border:0;background:none;cursor:pointer;paddin
 .notification-copy{min-width:0;padding-right:4px}
 .notification-title{font-weight:900;font-size:15px}
 .notification-body{font-size:13px;color:var(--muted);font-weight:700;margin-top:2px}
-.notification-time{font-size:11px;color:var(--muted);font-weight:800;margin-top:6px}
+.notification-time{font-size:11px;color:var(--muted);font-weight:800;margin-top:6px}.notification-follow-action{margin-top:9px}
 .unread-dot{position:absolute;right:12px;top:14px;width:8px;height:8px;border-radius:50%;background:var(--danger)}
 .social-markread{font-size:13px;color:var(--primary);font-weight:900;padding:7px 10px;border-radius:999px;background:var(--surface2)}
 .social-divider{height:1px;background:var(--line);margin:2px 0}
@@ -151,8 +151,8 @@ function levelInfo(xp){var L=levelOf(xp),a=levelStart(L),b=levelStart(L+1);retur
 function fmtXp(x){var r=Math.round(x*10)/10;return r%1===0?String(r):r.toFixed(1)}function fmtMult(m){return'×'+Math.round(m*100)/100}
 function boardOpen(){return new Date().getHours()>=BOARD_OPEN_HOUR}function untilOpen(){var n=new Date(),t=new Date(n);t.setHours(BOARD_OPEN_HOUR,0,0,0);return fmtClock((t-n)/1000)}
 
-function defaults(){return{v:2,onboarded:false,profile:{name:'',emoji:EMOJIS[0],color:COLORS[6],goal:120},subjects:[],log:{},timer:null,selected:null,lastStopped:0,xp:0,chain:0,boostSecs:0,manualXpDate:dkey(),manualXpToday:0,socialSeen:{},notifications:[],siteSeenAt:'',updatedAt:0}}
-function normalize(o){var d=defaults();if(!o||typeof o!=='object')return d;var p=o.profile&&typeof o.profile==='object'?o.profile:{};d.onboarded=!!o.onboarded;d.profile={name:str(p.name,20),emoji:str(p.emoji,8)||d.profile.emoji,color:safeColor(p.color)||d.profile.color,goal:typeof p.goal==='number'&&p.goal>=GOAL_MIN&&p.goal<=480?Math.round(p.goal):120};d.subjects=(Array.isArray(o.subjects)?o.subjects:[]).filter(function(s){return s&&typeof s.id==='string'&&typeof s.name==='string'}).map(function(s){return{id:s.id.slice(0,40),name:s.name.slice(0,24),color:safeColor(s.color)||COLORS[9],archived:!!s.archived}});var log={},logTotal=0;if(o.log&&typeof o.log==='object')Object.keys(o.log).forEach(function(k){var v=o.log[k];if(!/^\d{4}-\d{2}-\d{2}$/.test(k)||!v||typeof v!=='object')return;var e={},any=false;Object.keys(v).forEach(function(sid){var n=num(v[sid]);if(n){e[sid]=Math.round(n);any=true;logTotal+=e[sid]}});if(any)log[k]=e});d.log=log;d.timer=o.timer&&typeof o.timer.sid==='string'&&typeof o.timer.start==='number'?{sid:o.timer.sid,start:o.timer.start,chain:0,boostBase:typeof o.timer.boostBase==='number'&&isFinite(o.timer.boostBase)&&o.timer.boostBase>=0?o.timer.boostBase:0}:null;d.selected=typeof o.selected==='string'?o.selected:null;d.lastStopped=typeof o.lastStopped==='number'&&o.lastStopped>0?o.lastStopped:0;var storedXp=typeof o.xp==='number'&&isFinite(o.xp)&&o.xp>=0?o.xp:Math.round(logTotal*XP_PER_SEC*.1*1000)/1000;d.xp=o.v&&o.v>=2?storedXp:Math.round(storedXp*10*1000)/1000;d.chain=0;d.boostSecs=typeof o.boostSecs==='number'&&isFinite(o.boostSecs)&&o.boostSecs>=0?Math.min(o.boostSecs,MAX_SESSION*3650):0;d.manualXpDate=str(o.manualXpDate,10);d.manualXpToday=typeof o.manualXpToday==='number'&&isFinite(o.manualXpToday)?Math.max(0,Math.min(MANUAL_XP_DAILY_CAP,o.manualXpToday)):0;if(d.manualXpDate!==dkey()){d.manualXpDate=dkey();d.manualXpToday=0}d.socialSeen=o.socialSeen&&typeof o.socialSeen==='object'&&!Array.isArray(o.socialSeen)?o.socialSeen:{};d.notifications=(Array.isArray(o.notifications)?o.notifications:[]).filter(function(n){return n&&typeof n==='object'}).slice(-100);d.siteSeenAt=typeof o.siteSeenAt==='string'?o.siteSeenAt:'';d.updatedAt=num(o.updatedAt);return d}
+function defaults(){return{v:2,onboarded:false,profile:{name:'',emoji:EMOJIS[0],color:COLORS[6],goal:120},subjects:[],log:{},timer:null,selected:null,lastStopped:0,xp:0,chain:0,boostSecs:0,manualXpDate:dkey(),manualXpToday:0,socialSeen:{},followerSeen:{},followerBaselineReady:false,followingIds:[],notifications:[],siteSeenAt:'',updatedAt:0}}
+function normalize(o){var d=defaults();if(!o||typeof o!=='object')return d;var p=o.profile&&typeof o.profile==='object'?o.profile:{};d.onboarded=!!o.onboarded;d.profile={name:str(p.name,20),emoji:str(p.emoji,8)||d.profile.emoji,color:safeColor(p.color)||d.profile.color,goal:typeof p.goal==='number'&&p.goal>=GOAL_MIN&&p.goal<=480?Math.round(p.goal):120};d.subjects=(Array.isArray(o.subjects)?o.subjects:[]).filter(function(s){return s&&typeof s.id==='string'&&typeof s.name==='string'}).map(function(s){return{id:s.id.slice(0,40),name:s.name.slice(0,24),color:safeColor(s.color)||COLORS[9],archived:!!s.archived}});var log={},logTotal=0;if(o.log&&typeof o.log==='object')Object.keys(o.log).forEach(function(k){var v=o.log[k];if(!/^\d{4}-\d{2}-\d{2}$/.test(k)||!v||typeof v!=='object')return;var e={},any=false;Object.keys(v).forEach(function(sid){var n=num(v[sid]);if(n){e[sid]=Math.round(n);any=true;logTotal+=e[sid]}});if(any)log[k]=e});d.log=log;d.timer=o.timer&&typeof o.timer.sid==='string'&&typeof o.timer.start==='number'?{sid:o.timer.sid,start:o.timer.start,chain:0,boostBase:typeof o.timer.boostBase==='number'&&isFinite(o.timer.boostBase)&&o.timer.boostBase>=0?o.timer.boostBase:0}:null;d.selected=typeof o.selected==='string'?o.selected:null;d.lastStopped=typeof o.lastStopped==='number'&&o.lastStopped>0?o.lastStopped:0;var storedXp=typeof o.xp==='number'&&isFinite(o.xp)&&o.xp>=0?o.xp:Math.round(logTotal*XP_PER_SEC*.1*1000)/1000;d.xp=o.v&&o.v>=2?storedXp:Math.round(storedXp*10*1000)/1000;d.chain=0;d.boostSecs=typeof o.boostSecs==='number'&&isFinite(o.boostSecs)&&o.boostSecs>=0?Math.min(o.boostSecs,MAX_SESSION*3650):0;d.manualXpDate=str(o.manualXpDate,10);d.manualXpToday=typeof o.manualXpToday==='number'&&isFinite(o.manualXpToday)?Math.max(0,Math.min(MANUAL_XP_DAILY_CAP,o.manualXpToday)):0;if(d.manualXpDate!==dkey()){d.manualXpDate=dkey();d.manualXpToday=0}d.socialSeen=o.socialSeen&&typeof o.socialSeen==='object'&&!Array.isArray(o.socialSeen)?o.socialSeen:{};d.followerSeen=o.followerSeen&&typeof o.followerSeen==='object'&&!Array.isArray(o.followerSeen)?o.followerSeen:{};d.followerBaselineReady=!!o.followerBaselineReady;d.followingIds=Array.isArray(o.followingIds)?o.followingIds.filter(function(id){return typeof id==='string'&&id&&id.length<100}):[];d.notifications=(Array.isArray(o.notifications)?o.notifications:[]).filter(function(n){return n&&typeof n==='object'}).slice(-100);d.siteSeenAt=typeof o.siteSeenAt==='string'?o.siteSeenAt:'';d.updatedAt=num(o.updatedAt);return d}
 function localKey(identity){return identity&&identity!=='anonymous'?LS_PREFIX+String(identity):ANON_LOCAL_KEY}
 function parseStored(raw){try{return raw?normalize(JSON.parse(raw)):null}catch(e){return null}}
 function loadLocalFor(identity){
@@ -173,7 +173,7 @@ function localSave(){
   var identity=isAnonymous||!UID?'anonymous':UID;
   saveLocalFor(identity,S);
 }
-var S=defaults(),tab='home',lbPeriod=0,lbMode='time',breakRange=0,lbTick=0,popOrb=false,popId=null,popAvatar=false,shrinkCard=false,UID=null,DB=null,canWrite=true,isAnonymous=true,authEmail='',authUsername='',lbDocs=new Map(),liveState='offline',syncState='local',authBusy=false,shownLevel=levelOf(S.xp),socialFollowing=new Set(),socialRefreshBusy=false,socialSearchTimer=null;
+var S=defaults(),tab='home',lbPeriod=0,lbMode='time',breakRange=0,lbTick=0,popOrb=false,popId=null,popAvatar=false,shrinkCard=false,UID=null,DB=null,canWrite=true,isAnonymous=true,authEmail='',authUsername='',lbDocs=new Map(),liveState='offline',syncState='local',authBusy=false,shownLevel=levelOf(S.xp),socialFollowing=new Set(),socialRefreshBusy=false,socialSearchTimer=null,socialTick=0,boardRefreshTick=0;
 function activeSubjects(){return S.subjects.filter(function(s){return!s.archived})}function subjById(id){return S.subjects.find(function(s){return s.id===id&&!s.archived})||null}function anySubj(id){return S.subjects.find(function(s){return s.id===id})||null}function ensureSelected(){var a=activeSubjects();if(!subjById(S.selected))S.selected=a.length?a[0].id:null}function nextColor(){var used=activeSubjects().map(function(s){return s.color});return COLORS.find(function(c){return used.indexOf(c)<0})||COLORS[Math.floor(Math.random()*COLORS.length)]}
 function daySecs(k){var d=S.log[k],t=0;if(!d)return 0;Object.keys(d).forEach(function(s){t+=d[s]});return t}function liveSecs(){return S.timer?Math.max(0,Math.min((Date.now()-S.timer.start)/1000,MAX_SESSION)):0}function todaySecs(){return daySecs(dkey())+liveSecs()}function weekSecs(){var wk=weekStartKey(),t=0;Object.keys(S.log).forEach(function(k){if(k>=wk)t+=daySecs(k)});return t+liveSecs()}function totalSecs(){var t=0;Object.keys(S.log).forEach(function(k){t+=daySecs(k)});return t+liveSecs()}function totalXp(){return S.xp+(S.timer?xpForSession(liveSecs(),S.timer.boostBase||0):0)}function hasDay(k,tk){return daySecs(k)+(k===tk?liveSecs():0)>=60}
 function streak(){var d=new Date(),tk=dkey(d),n=0;if(!hasDay(tk,tk))d=addDays(d,-1);while(n<3650&&hasDay(dkey(d),tk)){n++;d=addDays(d,-1)}return n}function bestStreak(){var ks=Object.keys(S.log).filter(function(k){return daySecs(k)>=60}).sort(),best=0,cur=0,prev=null;ks.forEach(function(k){if(prev&&dkey(addDays(parseKey(prev),1))===k)cur++;else cur=1;if(cur>best)best=cur;prev=k});return Math.max(best,streak())}
@@ -192,12 +192,36 @@ var BADGE_DEFS=[
 function earnedBadgeIds(){var total=totalSecs(),best=bestStreak(),out=[];if(total>0)out.push('first-step');if(total>=3600)out.push('one-hour');if(total>=36000)out.push('ten-hours');if(total>=180000)out.push('fifty-hours');if(best>=3)out.push('streak-3');if(best>=7)out.push('streak-7');return out}
 function badgeDef(id){return BADGE_DEFS.find(function(b){return b.id===id})||null}
 function relativeTime(ts){var t=new Date(ts).getTime();if(!isFinite(t))return '';var sec=Math.max(0,Math.floor((Date.now()-t)/1000));if(sec<60)return'Just now';var min=Math.floor(sec/60);if(min<60)return min+'m ago';var h=Math.floor(min/60);if(h<24)return h+'h ago';var d=Math.floor(h/24);if(d<7)return d+'d ago';return new Date(t).toLocaleDateString(undefined,{day:'numeric',month:'short'})}
-function pushNotification(n){var id=n.id||('n'+Date.now().toString(36)+Math.random().toString(36).slice(2,7));if(S.notifications.some(function(x){return x.id===id}))return false;S.notifications.push({id:id,type:n.type||'info',title:str(n.title,100),body:str(n.body,240),actorId:n.actorId||'',actorName:str(n.actorName,20),actorEmoji:str(n.actorEmoji,8)||'',actorColor:safeColor(n.actorColor)||'',createdAt:n.createdAt||new Date().toISOString(),read:false});if(S.notifications.length>100)S.notifications=S.notifications.slice(-100);return true}
+function pushNotification(n){
+  if(!n||typeof n!=='object')return false;
+  var type=n.type||'info',actorId=n.actorId||'';
+  if(actorId&&UID&&actorId===UID&&(type==='follow'||type==='badge'||type==='level'))return false;
+  var id=n.id||('n'+Date.now().toString(36)+Math.random().toString(36).slice(2,7));
+  if(S.notifications.some(function(x){return x.id===id}))return false;
+  S.notifications.push({
+    id:id,
+    type:type,
+    title:str(n.title,100),
+    body:str(n.body,240),
+    actorId:actorId,
+    actorName:str(n.actorName,20),
+    actorEmoji:str(n.actorEmoji,8)||'',
+    actorColor:safeColor(n.actorColor)||'',
+    createdAt:n.createdAt||new Date().toISOString(),
+    read:false
+  });
+  if(S.notifications.length>100)S.notifications=S.notifications.slice(-100);
+  return true;
+}
 function unreadNotifications(){return S.notifications.filter(function(n){return !n.read}).length}
 function paintNotificationBadge(){var b=document.querySelector('.notif-count');if(!b)return;var n=unreadNotifications();b.hidden=n<=0;b.textContent=n>99?'99+':String(n)}
 
-var saveTimer=null,saving=false,savingEpoch=0,again=false,lastState='',lastLb='',authEpoch=0;
-function touch(immediate){S.updatedAt=Date.now();scheduleSave(immediate)}
+var saveTimer=null,saving=false,savingEpoch=0,again=false,lastState='',lastLb='',authEpoch=0,followedDocs=new Map(),followedDocsBusy=false,followedDocsEpoch=0;
+function touch(immediate){
+  S.updatedAt=Date.now();
+  localSave();
+  scheduleSave(immediate);
+}
 function scheduleSave(immediate){
   localSave();
   clearTimeout(saveTimer);
@@ -208,7 +232,7 @@ function scheduleSave(immediate){
   },immediate?60:900);
 }
 function cancelScheduledSave(){clearTimeout(saveTimer);saveTimer=null;again=false}
-function accountConnected(){return!!(DB&&UID&&!isAnonymous&&authUsername)}
+function accountConnected(){return!!(DB&&UID&&!isAnonymous)}
 function cleanUsername(v){return String(v||'').trim().toLowerCase()}
 function validUsername(v){return/^[a-z0-9_]{3,20}$/.test(v)}
 function usernameEmail(v){return cleanUsername(v)+'@accounts.ttrevise.app'}
@@ -253,13 +277,39 @@ function remoteSave(epoch){
 function setSync(s){syncState=s;var el=$('#syncNote');if(el)el.textContent=syncText();var as=$('#authStatusText');if(as){as.textContent=accountStatusText();as.className='authstatus'+(accountConnected()?' ok':'')}var ae=$('#authEmail');if(ae)ae.textContent=accountConnected()?'@'+accountDisplayName():'';var ah=$('#authHint');if(ah)ah.textContent=accountConnected()?'Your leaderboard entry and revision history sync between devices.':'Your data is currently local to this device. Connect an account to make it follow you to other devices.';if(tab==='board')renderLbList();paintNotificationBadge()}
 function syncText(){if(!DB||!UID)return'Saved on this device only.';if(isAnonymous)return'Your progress is local to this device. Create an account to sync and join leaderboards.';if(syncState==='readonly'||!canWrite)return'Your account is connected, but syncing is unavailable right now.';if(syncState==='error')return'Could not sync just now. Your local copy is safe and we will retry.';return'Synced. Your progress follows you across devices.'}
 function accountStatusText(){if(!DB||!UID)return'Local only';if(isAnonymous)return'Local session';return'Synced account'}function accountDisplayName(){return cleanUsername(authUsername||S.profile.name||'account')||'account'}
+function lbDoc(){
+  var days={},keys=Object.keys(S.log).sort().slice(-35),total=0;
+  keys.forEach(function(k){days[k]=daySecs(k);});
+  Object.keys(S.log).forEach(function(k){total+=daySecs(k);});
+  var sub=S.timer?anySubj(S.timer.sid):null;
+  var presence=sub
+    ? {state:'revising',name:sub.name.slice(0,24),color:sub.color,since:S.timer.start,boostBase:S.timer.boostBase||0,stoppedAt:0}
+    : {state:'stopped',name:'',color:S.profile.color,since:0,boostBase:0,stoppedAt:S.lastStopped||0};
+  return {
+    name:(S.profile.name||'Student').slice(0,20),
+    username:authUsername||'',
+    emoji:S.profile.emoji,
+    color:S.profile.color,
+    days:days,
+    total:total,
+    xp:Math.round(S.xp*10)/10,
+    level:levelOf(S.xp),
+    badges:earnedBadgeIds(),
+    studying:presence
+  };
+}
 function setLive(s){liveState=s;var p=$('#livepill');if(p){p.className='livepill'+(s==='live'?' live':'');p.lastChild.textContent=s==='live'?'Live':'Offline'}}
 
 async function loadRemoteState(){
-  if(!accountConnected())return false;
+  if(!accountConnected())return {status:'offline'};
   try{
-    var r=await sb.from('tt_state').select('state,updated_at').eq('user_id',UID).maybeSingle();
-    if(!accountConnected())return false;
+    var targetUID=UID;
+    var r=await sb.from('tt_state').select('state,updated_at').eq('user_id',targetUID).maybeSingle();
+    if(!accountConnected()||targetUID!==UID)return {status:'stale'};
+    if(r.error){
+      console.error('Timetracker state load error:',r.error);
+      return {status:'error',error:r.error};
+    }
     if(r.data&&r.data.state){
       var remote=normalize(r.data.state);
       var remoteTs=new Date(r.data.updated_at||0).getTime()||remote.updatedAt||0;
@@ -272,10 +322,13 @@ async function loadRemoteState(){
         scheduleSave(true);
       }
       shownLevel=levelOf(totalXp());
-      return true;
+      return {status:'loaded'};
     }
-  }catch(e){console.error('Timetracker state load error:',e)}
-  return false;
+    return {status:'missing'};
+  }catch(e){
+    console.error('Timetracker state load error:',e);
+    return {status:'error',error:e};
+  }
 }
 async function activateSession(session){
   /* Every auth transition gets a fresh state boundary. Never carry the previous
@@ -289,20 +342,52 @@ async function activateSession(session){
   DB=sb;
   isAnonymous=!!(session&&session.user&&session.user.is_anonymous);
   authEmail=session&&session.user?session.user.email||'':'';
-  authUsername=cleanUsername(session&&session.user&&session.user.user_metadata&&session.user.user_metadata.username||'');
+
+  /* Prefer the account metadata, but fall back to the custom account email
+     because older sessions may not have username metadata populated. */
+  authUsername=cleanUsername(
+    session&&session.user&&session.user.user_metadata&&session.user.user_metadata.username ||
+    ''
+  );
+  if(!authUsername&&authEmail){
+    var em=String(authEmail).toLowerCase();
+    var marker='@accounts.ttrevise.app';
+    if(em.slice(-marker.length)===marker)authUsername=cleanUsername(em.slice(0,-marker.length));
+  }
+
+  /* Drop every account-specific social cache before loading the new identity. */
+  lbDocs=new Map();
+  followedDocs=new Map();
+  socialFollowing=new Set();
+  followedDocsEpoch=authEpoch;
+
   var newIdentity=isAnonymous?'anonymous':UID;
   S=loadLocalFor(newIdentity);
+  socialFollowing=new Set((S.followingIds||[]).filter(function(id){return id&&id!==UID;}));
+
+  /* Older builds could have stored self-referential social notifications.
+     Remove them when the account is activated so the user never sees them. */
+  S.notifications=(Array.isArray(S.notifications)?S.notifications:[]).filter(function(n){
+    return !(n&&n.actorId===UID&&(n.type==='follow'||n.type==='badge'||n.type==='level'));
+  });
+
   ensureSelected();
   shownLevel=levelOf(S.xp);
   syncState=accountConnected()?'synced':'local';
-  await loadRemoteState();
-  if(tab==='board'&&accountConnected())await loadBoard();
+  var remoteResult=await loadRemoteState();
+
+  if(accountConnected()&&S.onboarded){
+    await ensureBoardDirectoryRow();
+    if(remoteResult&&remoteResult.status==='missing')scheduleSave(true);
+    if(remoteResult&&remoteResult.status==='error')setSync('error');
+  }
 }
 async function handleAuthSession(session){
   var nextUID=session&&session.user?session.user.id:null,nextAnon=!!(session&&session.user&&session.user.is_anonymous);
   if(DB&&UID===nextUID&&isAnonymous===nextAnon)return;
   await activateSession(session);
-  if(accountConnected())detectSocialActivity();
+  if(accountConnected())await loadBoard();
+  if(accountConnected())await detectSocialActivity();
   render();
   setSync(accountConnected()?'synced':'local');
 }
@@ -312,8 +397,13 @@ async function forceLocalSignOut(){
   cancelScheduledSave();
   authEpoch++;
   resetSyncMarkers();
+  deleteLocalFor('anonymous');
   S=defaults();
   UID=null;DB=sb;isAnonymous=true;authEmail='';authUsername='';canWrite=true;
+  lbDocs=new Map();
+  followedDocs=new Map();
+  socialFollowing=new Set();
+  followedDocsEpoch=authEpoch;
   ensureSelected();shownLevel=levelOf(S.xp);syncState='local';
   try{if(sb)await sb.auth.signOut({scope:'local'});}catch(e){console.warn('Sign out:',e)}
   render();setSync('local');
@@ -340,9 +430,195 @@ async function initRemote(){
   if(accountConnected()&&S.onboarded)scheduleSave(true);
 }
 
-async function loadBoard(){if(!sb)return;var r=await sb.from('tt_board').select('*').order('updated_at',{ascending:false}).limit(200);if(r.error||!r.data){if(r.error)console.warn('Board load:',r.error.message);return}var m=new Map();r.data.forEach(function(row){if(!row.user_id)return;m.set(row.user_id,{user_id:row.user_id,username:cleanUsername(row.username||''),name:row.name,emoji:row.emoji,color:row.color,days:row.days,total:row.total,xp:num(row.xp),level:typeof row.level==='number'?row.level:levelOf(num(row.xp)),badges:Array.isArray(row.badges)?row.badges:[],studying:row.studying})});lbDocs=m;if(accountConnected()){await refreshFollowing();detectSocialActivity()}if(tab==='board'&&S.onboarded)renderLbList();if(tab==='home'&&S.onboarded)paintFriendsLive()}
+function boardDoc(row){
+  if(!row||!row.user_id)return null;
+  return {
+    user_id:row.user_id,
+    username:cleanUsername(row.username||''),
+    name:row.name,
+    emoji:row.emoji,
+    color:row.color,
+    days:row.days,
+    total:row.total,
+    xp:num(row.xp),
+    level:typeof row.level==='number'?row.level:levelOf(num(row.xp)),
+    badges:Array.isArray(row.badges)?row.badges:[],
+    studying:row.studying,
+    updated_at:row.updated_at||''
+  };
+}
 
-function openSyncSheet(mode){mode=mode||'menu';if(mode==='menu'){openSheet(function(sheet){sheet.append(h('h2',null,'Sync across devices'),h('p',{class:'muted'},'Create an account on this device, then use the same username and password on your other device.'),h('div',{class:'authactions'},h('button',{class:'smallbtn primary press',onclick:function(){closeSheet();setTimeout(function(){openSyncSheet('create')},230)}},'Create account'),h('button',{class:'smallbtn press',onclick:function(){closeSheet();setTimeout(function(){openSyncSheet('login')},230)}},'Log in')))});return}openSheet(function(sheet){var isCreate=mode==='create',username=h('input',{class:'field',type:'text',maxlength:20,placeholder:'Username',autocomplete:'username','aria-label':'Username',spellcheck:'false'}),password=h('input',{class:'field',type:'password',maxlength:72,placeholder:'Password',autocomplete:isCreate?'new-password':'current-password','aria-label':'Password'}),confirm=isCreate?h('input',{class:'field',type:'password',maxlength:72,placeholder:'Confirm password',autocomplete:'new-password','aria-label':'Confirm password'}):null,err=h('p',{class:'err',role:'alert'});function check(){var u=cleanUsername(username.value);if(!validUsername(u)){err.textContent='Username must be 3-20 characters using letters, numbers or _.';username.focus();return null}if(String(password.value).length<6){err.textContent='Password must be at least 6 characters.';password.focus();return null}if(isCreate&&password.value!==confirm.value){err.textContent='The passwords do not match.';confirm.focus();return null}return u}var switcher=h('button',{class:'btn ghost press',onclick:function(){closeSheet();setTimeout(function(){openSyncSheet(isCreate?'login':'create')},230)}},isCreate?'I already have an account':'Create a new account');var submit=h('button',{class:'btn press',onclick:async function(){var u=check();if(!u||authBusy)return;authBusy=true;submit.disabled=true;switcher.disabled=true;err.textContent='';try{if(isCreate){if(!isAnonymous){try{await sb.auth.signOut()}catch(ignore){}var fresh=await sb.auth.signInAnonymously();if(fresh.error)throw fresh.error;await handleAuthSession(fresh.data.session)}var r=await sb.auth.updateUser({email:usernameEmail(u),password:password.value,data:{username:u}});if(r.error)throw r.error;var current=await sb.auth.getSession();if(current.error)throw current.error;if(!current.data||!current.data.session)throw new Error('Account was created, but no session was returned.');await handleAuthSession(current.data.session);closeSheet();toast('Account created. Your progress is now synced.')}else{
+async function loadFollowedBoard(){
+  if(!accountConnected()||followedDocsBusy)return;
+  var epoch=authEpoch,targetUID=UID;
+  followedDocsBusy=true;
+  followedDocsEpoch=epoch;
+
+  try{
+    await refreshFollowing();
+    if(epoch!==authEpoch||targetUID!==UID||!accountConnected())return;
+
+    var ids=Array.from(socialFollowing).filter(function(id){return id&&id!==targetUID;});
+    if(!ids.length){
+      followedDocs=new Map();
+      if(tab==='home'&&S.onboarded)paintFriendsLive();
+      return;
+    }
+
+    /* Primary source: the public board/presence row. */
+    var boardResult=await sb.from('tt_board')
+      .select('*')
+      .in('user_id',ids);
+
+    if(epoch!==authEpoch||targetUID!==UID||!accountConnected())return;
+
+    if(boardResult.error){
+      console.warn('Followed people board load:',boardResult.error.message);
+    }
+
+    var next=new Map();
+    (boardResult.data||[]).forEach(function(row){
+      var d=boardDoc(row);
+      if(d)next.set(d.user_id,d);
+    });
+
+    /* Home-only fallback: if a followed account's board presence is missing,
+       derive the active timer from its synced state. The follower sees only
+       the minimal presence data needed for this card. */
+    try{
+      var stateResult=await sb.from('tt_state')
+        .select('user_id,state')
+        .in('user_id',ids);
+
+      if(stateResult.error){
+        console.warn('Followed people state load:',stateResult.error.message);
+      }else if(epoch===authEpoch&&targetUID===UID&&accountConnected()){
+        (stateResult.data||[]).forEach(function(row){
+          if(!row||!row.user_id||!row.state)return;
+
+          var existing=next.get(row.user_id)||followedDocs.get(row.user_id)||null;
+          var st=row.state;
+          var timer=st&&typeof st==='object'&&st.timer&&
+            typeof st.timer.start==='number' ? st.timer : null;
+
+          if(timer){
+            var prof=st.profile&&typeof st.profile==='object'?st.profile:{};
+            var subjects=Array.isArray(st.subjects)?st.subjects:[];
+            var sub=subjects.find(function(s){return s&&s.id===timer.sid;})||null;
+
+            var presence={
+              state:'revising',
+              name:sub&&typeof sub.name==='string'?sub.name.slice(0,24):'revision',
+              color:safeColor(sub&&sub.color)||safeColor(prof.color)||COLORS[6],
+              since:timer.start,
+              boostBase:typeof timer.boostBase==='number'&&timer.boostBase>=0?timer.boostBase:0,
+              stoppedAt:0
+            };
+
+            if(existing){
+              existing.studying=presence;
+              next.set(row.user_id,existing);
+            }else{
+              next.set(row.user_id,{
+                user_id:row.user_id,
+                username:'',
+                name:str(prof.name,20)||'Student',
+                emoji:str(prof.emoji,8)||'🙂',
+                color:safeColor(prof.color)||COLORS[6],
+                days:{},
+                total:0,
+                xp:num(st&&st.xp),
+                level:levelOf(num(st&&st.xp)),
+                badges:[],
+                studying:presence
+              });
+            }
+          }
+        });
+      }
+    }catch(e){
+      console.warn('Followed people presence fallback failed:',e);
+    }
+
+    if(epoch!==authEpoch||targetUID!==UID||!accountConnected())return;
+
+    /* Keep the last known document when a transient read omits a followed
+       user. Explicit unfollows are handled before this query. */
+    ids.forEach(function(id){
+      if(!next.has(id)&&followedDocs.has(id))next.set(id,followedDocs.get(id));
+    });
+
+    followedDocs=next;
+
+    /* Keep the general board cache in sync for people we actually follow. */
+    next.forEach(function(d,id){lbDocs.set(id,d);});
+
+    if(tab==='home'&&S.onboarded)paintFriendsLive();
+  }catch(e){
+    if(epoch===authEpoch&&targetUID===UID)console.warn('Followed people load failed:',e);
+  }finally{
+    followedDocsBusy=false;
+  }
+}
+
+async function loadBoard(){
+  if(!sb)return;
+  var epoch=authEpoch,targetUID=UID;
+  var r=await sb.from('tt_board').select('*').order('updated_at',{ascending:false}).limit(200);
+  if(epoch!==authEpoch||targetUID!==UID)return;
+  if(r.error||!r.data){
+    if(r.error)console.warn('Board load:',r.error.message);
+    return;
+  }
+  var m=new Map();
+  r.data.forEach(function(row){
+    var d=boardDoc(row);
+    if(d)m.set(d.user_id,d);
+  });
+  lbDocs=m;
+
+  if(accountConnected()){
+    await refreshFollowing();
+    await loadFollowedBoard();
+    detectSocialActivity();
+  }
+
+  if(tab==='board'&&S.onboarded)renderLbList();
+  if(tab==='home'&&S.onboarded)paintFriendsLive();
+}
+
+function openSyncSheet(mode){mode=mode||'menu';if(mode==='menu'){openSheet(function(sheet){sheet.append(h('h2',null,'Sync across devices'),h('p',{class:'muted'},'Create an account on this device, then use the same username and password on your other device.'),h('div',{class:'authactions'},h('button',{class:'smallbtn primary press',onclick:function(){closeSheet();setTimeout(function(){openSyncSheet('create')},230)}},'Create account'),h('button',{class:'smallbtn press',onclick:function(){closeSheet();setTimeout(function(){openSyncSheet('login')},230)}},'Log in')))});return}openSheet(function(sheet){var isCreate=mode==='create',username=h('input',{class:'field',type:'text',maxlength:20,placeholder:'Username',autocomplete:'username','aria-label':'Username',spellcheck:'false'}),password=h('input',{class:'field',type:'password',maxlength:72,placeholder:'Password',autocomplete:isCreate?'new-password':'current-password','aria-label':'Password'}),confirm=isCreate?h('input',{class:'field',type:'password',maxlength:72,placeholder:'Confirm password',autocomplete:'new-password','aria-label':'Confirm password'}):null,err=h('p',{class:'err',role:'alert'});function check(){var u=cleanUsername(username.value);if(!validUsername(u)){err.textContent='Username must be 3-20 characters using letters, numbers or _.';username.focus();return null}if(String(password.value).length<6){err.textContent='Password must be at least 6 characters.';password.focus();return null}if(isCreate&&password.value!==confirm.value){err.textContent='The passwords do not match.';confirm.focus();return null}return u}var switcher=h('button',{class:'btn ghost press',onclick:function(){closeSheet();setTimeout(function(){openSyncSheet(isCreate?'login':'create')},230)}},isCreate?'I already have an account':'Create a new account');var submit=h('button',{class:'btn press',onclick:async function(){var u=check();if(!u||authBusy)return;authBusy=true;submit.disabled=true;switcher.disabled=true;err.textContent='';try{if(isCreate){
+        /* If we are already anonymous, this is an intentional anonymous ->
+           registered upgrade, so preserve the anonymous local state. If the
+           user is switching from another registered account, create a fresh
+           anonymous session first so no old account data is carried over. */
+        var anonymousState=isAnonymous?normalize(S):defaults();
+        if(!isAnonymous){
+          deleteLocalFor('anonymous');
+          try{await sb.auth.signOut({scope:'local'})}catch(ignore){}
+          var fresh=await sb.auth.signInAnonymously();
+          if(fresh.error)throw fresh.error;
+          await handleAuthSession(fresh.data.session);
+          anonymousState=normalize(S);
+        }
+        var r=await sb.auth.updateUser({email:usernameEmail(u),password:password.value,data:{username:u}});
+        if(r.error)throw r.error;
+        var current=await sb.auth.getSession();
+        if(current.error)throw current.error;
+        if(!current.data||!current.data.session)throw new Error('Account was created, but no session was returned.');
+
+        /* Supabase keeps the same user id when upgrading an anonymous
+           account. Move only that anonymous user's local state to the
+           registered key. */
+        if(isAnonymous && current.data.session.user && current.data.session.user.id){
+          saveLocalFor(current.data.session.user.id,anonymousState);
+          deleteLocalFor('anonymous');
+        }
+
+        await handleAuthSession(current.data.session);
+        closeSheet();
+        toast('Account created. Your progress is now synced.');
+      }else{
         /* Always clear the old Supabase session before authenticating the new account.
            authBusy suppresses the intermediate SIGNED_OUT event so it cannot race the new login. */
         try{await sb.auth.signOut({scope:'local'})}catch(ignore2){}
@@ -351,7 +627,16 @@ function openSyncSheet(mode){mode=mode||'menu';if(mode==='menu'){openSheet(funct
         var session=r2.data.session;if(!session)throw new Error('No session was returned.');
         await handleAuthSession(session);
         closeSheet();toast('Logged in as @'+authUsername+'.')
-      }}catch(e){var msg=e&&e.message?e.message:'Could not complete that request.';if(/invalid login credentials/i.test(msg))msg='Incorrect username or password.';else if(/already registered|already exists|duplicate/i.test(msg))msg='That username is already in use.';err.textContent=msg}finally{authBusy=false;submit.disabled=false;switcher.disabled=false}}},isCreate?'Create account':'Log in');sheet.append(h('h2',null,isCreate?'Create account':'Log in'),h('p',{class:'muted'},isCreate?'Choose a username and password. Your new account starts with its own separate Timetracker data.':'Use the same username and password you used on your other device.'),username,password,confirm,err,submit,switcher)})}
+      }}catch(e){var msg=e&&typeof e.message==='string'?e.message:'Could not complete that request.';if(!msg||msg.toLowerCase()==='null'||msg.toLowerCase()==='undefined')msg='Could not complete that request.';if(/invalid login credentials/i.test(msg))msg='Incorrect username or password.';else if(/already registered|already exists|duplicate/i.test(msg))msg='That username is already in use.';err.textContent=msg}finally{authBusy=false;submit.disabled=false;switcher.disabled=false}}},isCreate?'Create account':'Log in');var formChildren=[
+  h('h2',null,isCreate?'Create account':'Log in'),
+  h('p',{class:'muted'},isCreate?'Choose a username and password. Your new account starts with its own separate Timetracker data.':'Use the same username and password you used on your other device.'),
+  username,
+  password
+];
+if(confirm)formChildren.push(confirm);
+formChildren.push(err,submit,switcher);
+sheet.append.apply(sheet,formChildren);
+})}
 var toastT;function toast(msg){var t=$('#toast');t.textContent=msg;t.classList.remove('show');void t.offsetWidth;t.classList.add('show');clearTimeout(toastT);toastT=setTimeout(function(){t.classList.remove('show')},2500)}var lastFocus=null;function openSheet(build){closeSheet(true);lastFocus=document.activeElement;var sheet=h('div',{class:'sheet',role:'dialog','aria-modal':'true'}),bd=h('div',{class:'backdrop',onclick:function(e){if(e.target===bd)closeSheet()}},sheet);build(sheet);$('#overlay').append(bd);var f=sheet.querySelector('input,button');if(f)setTimeout(function(){f.focus({preventScroll:true})},60)}function closeSheet(instant){var bd=$('#overlay .backdrop');if(!bd)return;if(instant===true){bd.remove();return}bd.classList.add('closing');setTimeout(function(){bd.remove()},220);setTimeout(paintFriendsLive,260);if(lastFocus&&lastFocus.focus&&document.contains(lastFocus))lastFocus.focus({preventScroll:true})}document.addEventListener('keydown',function(e){if(e.key==='Escape')closeSheet()});
 function burst(rect,color){if(reduceMotion()||!rect)return;var cx=rect.left+rect.width/2,cy=rect.top+rect.height/2;for(var i=0;i<12;i++){var size=8+Math.random()*16,ang=Math.random()*Math.PI*2,dist=70+Math.random()*90,b=h('i',{class:'rise',vars:{'--dx':Math.cos(ang)*dist+'px','--dy':(Math.sin(ang)*dist-60)+'px'}});b.style.width=b.style.height=size+'px';b.style.left=cx-size/2+'px';b.style.top=cy-size/2+'px';b.style.background='radial-gradient(circle at 30% 25%,rgba(255,255,255,.8),'+color+' 60%)';document.body.append(b);setTimeout(function(el){return function(){el.remove()}}(b),1200)}}
 function seg(labels,idx,onPick){var el=h('div',{class:'seg',role:'tablist',vars:{'--n':labels.length,'--i':idx}},h('span',{class:'seg-thumb'}));labels.forEach(function(label,i){el.append(h('button',{role:'tab','aria-selected':i===idx,onclick:function(){el.style.setProperty('--i',i);el.querySelectorAll('button').forEach(function(b,j){b.setAttribute('aria-selected',j===i)});onPick(i)}},label))});return el}
@@ -363,7 +648,27 @@ function stopTimer(){if(!S.timer)return;var stoppedAt=Date.now(),t=S.timer,secs=
 function buildNav(){var nav=$('#nav');nav.style.setProperty('--n',TABS.length);nav.style.setProperty('--i',0);nav.append(h('span',{class:'thumb'}));TABS.forEach(function(t){nav.append(h('button',{'data-tab':t[0],onclick:function(){go(t[0])}},icon(t[2],22),h('span',null,t[1])) )})}function updateNav(){var nav=$('#nav'),i=TABS.findIndex(function(t){return t[0]===tab});nav.hidden=!S.onboarded;nav.style.setProperty('--i',Math.max(0,i));nav.querySelectorAll('button').forEach(function(b){if(b.dataset.tab===tab)b.setAttribute('aria-current','page');else b.removeAttribute('aria-current')})}function go(t){if(t===tab||!S.onboarded)return;tab=t;render(true);window.scrollTo({top:0})}
 function render(anim){var root=$('#view'),ae=document.activeElement,fk=ae&&ae.dataset?ae.dataset.fk:null;ensureSelected();var v=!S.onboarded?viewOnboarding():{home:viewHome,stats:viewStats,board:viewBoard,me:viewProfile}[tab]();if(anim)v.classList.add('enter');root.replaceChildren(v);updateNav();paintNotificationBadge();if(S.onboarded&&tab==='board')renderLbList();updateLive();if(fk){var n=root.querySelector('[data-fk="'+fk+'"]');if(n)n.focus({preventScroll:true})}}
 function updateLive(){var now=Date.now();document.querySelectorAll('[data-since]').forEach(function(el){var since=+el.dataset.since;if(!since)return;var t=Math.max(0,Math.min((now-since)/1000,MAX_SESSION));el.textContent='timer'in el.dataset?fmtTimer((+el.dataset.base||0)+t):('base'in el.dataset?fmt((+el.dataset.base||0)+t):fmtClock(t))});document.querySelectorAll('[data-xp-base]').forEach(function(el){var base=+el.dataset.xpBase||0,since=+el.dataset.xpSince||0;if(el.dataset.xpLive==='1'&&since){var live=Math.max(0,Math.min((now-since)/1000,MAX_SESSION));el.textContent=fmtXp(base+xpForSession(live,+el.dataset.xpBoostBase||0))+' XP'}else el.textContent=fmtXp(base)+' XP'});var f=$('.goal-fill');if(f){var t2=todaySecs(),g=S.profile.goal*60;f.style.width=Math.min(100,t2/g*100)+'%';var gt=$('.goal-text');if(gt)gt.textContent=goalText(t2)}if(!S.onboarded)return;var info=levelInfo(totalXp());if(S.timer&&info.level>shownLevel)toast('Level up! You reached level '+info.level);shownLevel=info.level;var lc=$('.lvl-card');if(lc){$('.lvl-num',lc).textContent=info.level;$('.lvl-title',lc).textContent='Level '+info.level;$('.xp-fill',lc).style.width=info.pct+'%';$('.xp-text',lc).textContent=fmtXp(info.into)+' / '+fmtXp(info.span)+' XP to level '+(info.level+1)}if(S.timer){var secs=liveSecs(),boostElapsed=(S.timer.boostBase||0)+secs,tr=tierAt(boostElapsed),rx=$('.rs-xp'),rm=$('.rs-mult'),chips=$('.rs-chips'),hint=$('.rs-hint');if(rx)rx.textContent='+'+xpForSession(secs,S.timer.boostBase||0).toFixed(2);if(rm)rm.textContent=fmtMult(tr.mult);if(chips&&chips.dataset.key!==String(tr.mult)){chips.dataset.key=String(tr.mult);chips.replaceChildren(h('span',{class:'rs-chip'},tr.mult>1?'⏱ Long session '+fmtMult(tr.mult):'No boost yet'))}if(hint)hint.textContent=tr.nextIn>0?'Next boost ('+fmtMult(tr.nextMult)+') in '+fmtTimer(tr.nextIn):'Top long-session boost reached'}}
-var lastOpen=boardOpen();setInterval(function(){updateLive();var o=boardOpen();if(o!==lastOpen){lastOpen=o;if(tab==='board'&&S.onboarded&&lbMode==='time')render()}var lc=$('#lockCount');if(lc)lc.textContent=untilOpen();if(tab==='board'&&S.onboarded&&++lbTick%15===0)renderLbList();if(S.onboarded&&accountConnected()&&Date.now()%30000<1000)detectSocialActivity()},1000);document.addEventListener('visibilitychange',function(){if(document.hidden)return;updateLive();if(sb&&S.onboarded){try{sb.auth.getSession()}catch(e){}loadBoard()}});
+var lastOpen=boardOpen();setInterval(function(){
+  updateLive();
+  var o=boardOpen();
+  if(o!==lastOpen){
+    lastOpen=o;
+    if(tab==='board'&&S.onboarded&&lbMode==='time')render();
+  }
+  var lc=$('#lockCount');
+  if(lc)lc.textContent=untilOpen();
+
+  if(tab==='board'&&S.onboarded&&++lbTick%15===0)renderLbList();
+
+  if(S.onboarded&&accountConnected()){
+    if(++boardRefreshTick%5===0){
+      loadFollowedBoard();
+    }
+    if(++socialTick%10===0){
+      detectSocialActivity();
+    }
+  }
+},1000);document.addEventListener('visibilitychange',function(){if(document.hidden)return;updateLive();if(sb&&S.onboarded){try{sb.auth.getSession()}catch(e){}loadBoard()}});
 
 
 /* ---------- socials ---------- */
@@ -401,18 +706,67 @@ function safeSearchTerm(v){
 
 async function getFollowingIds(){
   if(!accountConnected())return [];
-  var r=await sb.from('tt_follows').select('following_id').eq('follower_id',UID);
-  if(r.error)throw r.error;
-  return (r.data||[]).map(function(x){return x.following_id;});
+  var targetUID=UID;
+  var localIds=Array.isArray(S.followingIds)?S.followingIds:[];
+  try{
+    var r=await sb.from('tt_follows').select('following_id').eq('follower_id',targetUID);
+    if(r.error)throw r.error;
+    return Array.from(new Set((r.data||[]).map(function(x){return x.following_id;}).filter(function(id){
+      return id&&id!==targetUID;
+    })));
+  }catch(e){
+    console.warn('Following server read failed; using local follow cache:',e);
+    return Array.from(new Set(localIds)).filter(function(id){return id&&id!==targetUID;});
+  }
 }
 
 async function refreshFollowing(){
+  var epoch=authEpoch,targetUID=UID;
   try{
-    socialFollowing=new Set(await getFollowingIds());
+    if(!accountConnected())return [];
+    var ids=await getFollowingIds();
+    if(epoch!==authEpoch||targetUID!==UID||!accountConnected())return [];
+    socialFollowing=new Set(ids);
+
+    var normalized=Array.from(socialFollowing);
+    var currentLocal=(S.followingIds||[]).slice().filter(function(id){return id&&id!==UID;});
+    var a=normalized.slice().sort(),b=currentLocal.slice().sort();
+    if(JSON.stringify(a)!==JSON.stringify(b)){
+      S.followingIds=normalized;
+      localSave();
+    }
+    return normalized;
   }catch(e){
-    console.warn('Following load failed:',e);
-    socialFollowing=new Set();
+    if(epoch===authEpoch&&targetUID===UID){
+      console.warn('Following load failed:',e);
+    }
+    return Array.isArray(S.followingIds)?S.followingIds:[];
   }
+}
+
+function setLocalFollowing(targetId,following){
+  if(!S.followingIds)S.followingIds=[];
+  S.followingIds=S.followingIds.filter(function(id){return id&&id!==targetId;});
+  if(following)S.followingIds.push(targetId);
+  S.followingIds=Array.from(new Set(S.followingIds));
+  localSave();
+}
+
+async function followUserById(targetId,person){
+  if(!accountConnected()||!targetId||targetId===UID)return false;
+  await refreshFollowing();
+  if(socialFollowing.has(targetId))return true;
+  var ins=await sb.from('tt_follows').insert({follower_id:UID,following_id:targetId});
+  if(ins.error){
+    /* A duplicate follow is harmless; re-read the relationship before failing. */
+    await refreshFollowing();
+    if(!socialFollowing.has(targetId))throw ins.error;
+  }else{
+    socialFollowing.add(targetId);
+  }
+  setLocalFollowing(targetId,true);
+  if(person)initializeSocialSeen(targetId,person);
+  return true;
 }
 
 function personRow(person,following,refresh){
@@ -427,17 +781,20 @@ function personRow(person,following,refresh){
     if(!accountConnected()){toast('Create an account to follow people.');return;}
     btn.disabled=true;
     try{
+      var targetId=person.user_id||person.id;
       if(following){
-        var d=await sb.from('tt_follows').delete().eq('follower_id',UID).eq('following_id',person.user_id||person.id);
+        var d=await sb.from('tt_follows').delete().eq('follower_id',UID).eq('following_id',targetId);
         if(d.error)throw d.error;
-        socialFollowing.delete(person.user_id||person.id);
+        socialFollowing.delete(targetId);
+        setLocalFollowing(targetId,false);
+        followedDocs.delete(targetId);
       }else{
-        var ins=await sb.from('tt_follows').insert({follower_id:UID,following_id:person.user_id||person.id});
-        if(ins.error)throw ins.error;
-        socialFollowing.add(person.user_id||person.id);
-        initializeSocialSeen(person.user_id||person.id,person);
+        await followUserById(targetId,person);
+        var cached=lbDocs.get(targetId);
+        if(cached)followedDocs.set(targetId,cached);
       }
       touch(false);
+      await loadFollowedBoard();
       refresh();
     }catch(e){
       console.error('Follow error:',e);
@@ -459,10 +816,47 @@ function initializeSocialSeen(id,person){
   };
 }
 
+async function ensureBoardDirectoryRow(){
+  if(!accountConnected()||!S.onboarded)return false;
+  try{
+    var existing=await sb.from('tt_board').select('user_id').eq('user_id',UID).maybeSingle();
+    if(existing.error)throw existing.error;
+    if(existing.data&&existing.data.user_id)return true;
+
+    var lb=lbDoc();
+    var row={
+      user_id:UID,
+      username:lb.username||authUsername||null,
+      name:lb.name,
+      emoji:lb.emoji,
+      color:lb.color,
+      days:lb.days,
+      total:Math.round(lb.total||0),
+      xp:Math.round((lb.xp||0)*10)/10,
+      level:lb.level||1,
+      badges:lb.badges||[],
+      studying:lb.studying,
+      updated_at:new Date().toISOString()
+    };
+    var r=await sb.from('tt_board').insert(row);
+    if(r.error)throw r.error;
+    return true;
+  }catch(e){
+    console.warn('Board directory ensure failed:',e);
+    return false;
+  }
+}
+
 async function searchSocialAccounts(term){
   term=safeSearchTerm(term);
   if(!term)return [];
-  var q=sb.from('tt_board').select('user_id,username,name,emoji,color,xp,level,badges,total').ilike('username','%'+term+'%').neq('user_id',UID).limit(20);
+
+  var q=sb.from('tt_board')
+    .select('user_id,username,name,emoji,color,xp,level,badges,total')
+    .ilike('username','%'+term+'%')
+    .neq('user_id',UID)
+    .limit(20);
+
   var r=await q;
   if(r.error)throw r.error;
   return r.data||[];
@@ -495,7 +889,7 @@ async function openSocialSearch(){
       followingBox.replaceChildren();
       var arr=Array.from(socialFollowing);
       if(!arr.length){followingBox.append(h('p',{class:'social-empty'},'You are not following anyone yet.'));return;}
-      var people=arr.map(function(id){return lbDocs.get(id);}).filter(Boolean).map(function(p){return Object.assign({user_id:p.user_id||null},p);});
+      var people=arr.map(function(id){return followedDocs.get(id)||lbDocs.get(id);}).filter(Boolean).map(function(p){return Object.assign({user_id:p.user_id||null},p);});
       if(!people.length){followingBox.append(h('p',{class:'social-empty'},'You are not following anyone yet.'));return;}
       people.forEach(function(p){
         var id=p.user_id;
@@ -564,13 +958,41 @@ function openSocialNotifications(){
       list.append(h('p',{class:'social-empty'},'You are all caught up.')); 
     }else{
       notes.forEach(function(n){
-        var ico=n.type==='badge'?'🏆':n.type==='level'?'⭐':n.type==='update'?'🛠️':'🔔';
+        var ico=n.type==='badge'?'🏆':n.type==='level'?'⭐':n.type==='update'?'🛠️':n.type==='follow'?'👥':'🔔';
+        var actions=null;
+        if(n.type==='follow'&&n.actorId&&n.actorId!==UID){
+          var alreadyFollowing=socialFollowing.has(n.actorId);
+          var followBtn=h('button',{
+            class:'follow-btn'+(alreadyFollowing?' following':'') ,
+            onclick:async function(){
+              if(alreadyFollowing)return;
+              followBtn.disabled=true;
+              try{
+                await followUserById(n.actorId,{
+                  user_id:n.actorId,
+                  name:n.actorName||'Student',
+                  emoji:n.actorEmoji||'🙂',
+                  color:n.actorColor||COLORS[6]
+                });
+                alreadyFollowing=true;
+                followBtn.classList.add('following');
+                followBtn.textContent='Following';
+              }catch(e){
+                console.error('Follow back error:',e);
+                toast(e&&e.message?e.message:'Could not follow them back.');
+                followBtn.disabled=false;
+              }
+            }
+          },alreadyFollowing?'Following':'Follow back');
+          actions=h('div',{class:'notification-follow-action'},followBtn);
+        }
         list.append(h('div',{class:'notification-row'+(n.read?'':' unread')},
           h('div',{class:'notification-icon'},ico),
           h('div',{class:'notification-copy'},
             h('div',{class:'notification-title'},n.title),
             h('div',{class:'notification-body'},n.body),
-            h('div',{class:'notification-time'},relativeTime(n.createdAt))
+            h('div',{class:'notification-time'},relativeTime(n.createdAt)),
+            actions
           ),
           n.read?null:h('i',{class:'unread-dot'})
         ));
@@ -586,13 +1008,63 @@ function openSocialNotifications(){
 
 async function detectSocialActivity(){
   if(!accountConnected())return false;
-  var changed=false;
+  var epoch=authEpoch,targetUID=UID,changed=false;
 
   try{
     await refreshFollowing();
+    if(epoch!==authEpoch||targetUID!==UID||!accountConnected())return false;
+
+    /* Detect incoming followers. The first successful read establishes a
+       baseline; later additions create notifications. Removing an ID from the
+       seen set means a later re-follow can notify again. */
+    if(!S.followerSeen)S.followerSeen={};
+    var fr=await sb.from('tt_follows')
+      .select('follower_id')
+      .eq('following_id',UID);
+
+    if(!fr.error){
+      if(epoch!==authEpoch||targetUID!==UID||!accountConnected())return false;
+
+      var activeFollowerIds={};
+      (fr.data||[]).forEach(function(row){
+        var fid=row.follower_id;
+        if(!fid||fid===UID)return;
+        activeFollowerIds[fid]=true;
+      });
+
+      if(!S.followerBaselineReady){
+        Object.keys(activeFollowerIds).forEach(function(fid){S.followerSeen[fid]=true;});
+        S.followerBaselineReady=true;
+        changed=true;
+      }else{
+        Object.keys(activeFollowerIds).forEach(function(fid){
+          if(S.followerSeen[fid])return;
+
+          var person=lbDocs.get(fid)||followedDocs.get(fid)||{};
+          var nid='follow-'+fid+'-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,6);
+          if(pushNotification({
+            id:nid,
+            type:'follow',
+            actorId:fid,
+            actorName:person.name||'Someone',
+            actorEmoji:person.emoji||'🙂',
+            actorColor:person.color||COLORS[6],
+            title:(person.name||'Someone')+' started following you',
+            body:'They followed your Timetracker profile. Follow them back?'
+          }))changed=true;
+
+          S.followerSeen[fid]=true;
+        });
+      }
+
+      Object.keys(S.followerSeen).forEach(function(fid){
+        if(!activeFollowerIds[fid])delete S.followerSeen[fid];
+      });
+    }
 
     socialFollowing.forEach(function(id){
-      var p=lbDocs.get(id);
+      if(id===UID)return;
+      var p=followedDocs.get(id)||lbDocs.get(id);
       if(!p)return;
       if(!S.socialSeen[id]){
         initializeSocialSeen(id,{level:p.level,badges:p.badges});
@@ -659,7 +1131,13 @@ async function detectSocialActivity(){
 
 function friendsLiveEl(){
   var list=[];
-  if(accountConnected())socialFollowing.forEach(function(id){var d=lbDocs.get(id);if(!d)return;var p=parseLb(id,d);if(p.studying&&p.studying.state==='revising')list.push(p)});
+  if(accountConnected())socialFollowing.forEach(function(id){
+    if(id===UID)return;
+    var d=followedDocs.get(id)||lbDocs.get(id);
+    if(!d)return;
+    var p=parseLb(id,d);
+    if(p.studying&&p.studying.state==='revising')list.push(p);
+  });
   list.sort(function(a,b){return a.studying.since-b.studying.since});
   var sec=h('section',{id:'friendsLive','aria-label':'Friends revising now',hidden:!list.length});
   if(!list.length)return sec;
@@ -675,7 +1153,12 @@ function friendsLiveEl(){
   sec.append(h('h2',{class:'sec-title'},'Friends revising now'),box);
   return sec;
 }
-function paintFriendsLive(){var old=$('#friendsLive');if(!old)return;old.replaceWith(friendsLiveEl());updateLive()}
+function paintFriendsLive(){
+  var old=$('#friendsLive');
+  if(!old)return;
+  old.replaceWith(friendsLiveEl());
+  updateLive();
+}
 function openSubjectSheet(sub){var editing=!!sub,color=sub?sub.color:nextColor();openSheet(function(sheet){var preview=h('div',{class:'chip bub'}),input=h('input',{class:'field',type:'text',maxlength:24,placeholder:'e.g. Biology',value:sub?sub.name:'','aria-label':'Subject name',autocomplete:'off'}),err=h('p',{class:'err',role:'alert'}),sw=h('div',{class:'swatches',role:'radiogroup','aria-label':'Colour'});function paint(){preview.textContent=input.value.trim()||'Subject name';Object.keys(bubVars(color)).forEach(function(k){preview.style.setProperty(k,bubVars(color)[k])});sw.querySelectorAll('.sw').forEach(function(b){var on=b.dataset.color===color;b.setAttribute('aria-checked',on);b.replaceChildren();if(on)b.append(icon('check',22))})}PALETTE.forEach(function(p){sw.append(h('button',{class:'sw bub press',role:'radio','aria-label':p[1],'data-color':p[0],vars:bubVars(p[0]),onclick:function(){color=p[0];paint()}}))});input.addEventListener('input',function(){err.textContent='';paint()});function save(){var n=input.value.trim().replace(/\s+/g,' ');if(!n){err.textContent='Give your subject a name.';input.focus();return}var dup=activeSubjects().some(function(s){return(!sub||s.id!==sub.id)&&s.name.toLowerCase()===n.toLowerCase()});if(dup){err.textContent='You already have a subject with that name.';input.focus();return}if(editing){sub.name=n.slice(0,24);sub.color=color}else{var s={id:uid(),name:n.slice(0,24),color:color,archived:false};S.subjects.push(s);popId=s.id;if(!S.selected)S.selected=s.id}touch();closeSheet();render()}input.addEventListener('keydown',function(e){if(e.key==='Enter'){e.preventDefault();save()}});sheet.append(h('h2',null,editing?'Edit subject':'Add subject'),h('div',{class:'preview'},preview),h('div',null,input,err),sw,h('div',{class:'actions'},h('button',{class:'btn ghost press',onclick:function(){closeSheet()}},'Cancel'),h('button',{class:'btn press',onclick:save},editing?'Save changes':'Add subject')));if(editing){var armed=false;sheet.append(h('button',{class:'btn link press',onclick:function(){if(S.timer&&S.timer.sid===sub.id){toast('Stop the timer before removing this subject');return}if(!armed){armed=true;this.textContent='Tap again to remove';return}sub.archived=true;ensureSelected();touch();closeSheet();render();toast('Removed '+sub.name+'. Your past time is still counted.') }},'Remove subject'))}paint()})}
 function openLogSheet(){var sub=subjById(S.selected);if(!sub)return;openSheet(function(sheet){var input=h('input',{class:'field',type:'number',inputmode:'numeric',min:1,max:600,value:30,'aria-label':'Minutes'}),err=h('p',{class:'err',role:'alert'}),quick=h('div',{class:'qrow'},[15,30,45,60,90].map(function(m){return h('button',{class:'qchip press',onclick:function(){input.value=m;err.textContent=''}},m+'m')}));function save(){var m=Math.round(+input.value);if(!(m>=1&&m<=600)){err.textContent='Enter between 1 and 600 minutes.';input.focus();return}var lvBefore=levelOf(S.xp),gain=addManualXpForMinutes(m);addSecs(sub.id,m*60);addXp(gain);var lvAfter=levelOf(S.xp);shownLevel=lvAfter;touch(true);closeSheet();render();var possible=m*60*XP_PER_SEC*MANUAL_XP_RATE,msg;if(lvAfter>lvBefore)msg='Level up! You are now level '+lvAfter+' · +'+fmtXp(gain)+' XP';else if(gain<=0)msg='Added '+fmt(m*60)+' to '+sub.name+' · manual XP limit reached';else if(gain<possible)msg='Added '+fmt(m*60)+' to '+sub.name+' · +'+fmtXp(gain)+' XP · daily manual limit reached';else msg='Added '+fmt(m*60)+' to '+sub.name+' · +'+fmtXp(gain)+' XP';toast(msg)}input.addEventListener('keydown',function(e){if(e.key==='Enter'){e.preventDefault();save()}});sheet.append(h('h2',null,'Add time by hand'),h('p',{class:'muted'},'Minutes you revised '+sub.name+' today. Manual time earns reduced XP, capped at '+MANUAL_XP_DAILY_CAP+' XP per day.'),quick,h('div',null,input,err),h('div',{class:'actions'},h('button',{class:'btn ghost press',onclick:function(){closeSheet()}},'Cancel'),h('button',{class:'btn press',onclick:save},'Add time')))})}
 
@@ -713,20 +1196,32 @@ function finishOnboarding(){
   var subs=activeSubjects();
   if(!subs.length){toast('Add a subject to continue');return;}
   ensureSelected();
-  if(!S.selected){S.selected=subs[0].id;}
+  if(!S.selected)S.selected=subs[0].id;
   S.onboarded=true;
+  S.updatedAt=Date.now();
   tab='home';
-  touch(true);
+  resetSyncMarkers();
+  localSave();
+
   try{
     render(true);
   }catch(e){
     console.error('Home render error:',e);
-    /* Keep the completed setup state even if a browser extension or
-       temporary UI error interrupts rendering. A second render can then
-       recover the Home screen on reload. */
     localSave();
     location.reload();
     return;
+  }
+
+  /* Write the profile row immediately, then let the normal save queue write
+     the full state. This avoids a gap where a re-created account is invisible. */
+  if(accountConnected()&&canWrite){
+    ensureBoardDirectoryRow().catch(function(e){
+      console.warn('Profile restore failed:',e);
+      setTimeout(function(){
+        if(accountConnected()&&S.onboarded)ensureBoardDirectoryRow().catch(function(err){console.warn('Profile retry failed:',err);});
+      },1200);
+    });
+    scheduleSave(true);
   }
   toast('You are all set');
 }
@@ -804,7 +1299,97 @@ function lbRow(e,rank){
 function renderLbList(){var box=$('#lbList');if(!box)return;var list=[];lbDocs.forEach(function(d,id){if(id!==UID)list.push(parseLb(id,d))});if(accountConnected())list.push(myEntry());list.sort(function(a,b){return entryValue(b)-entryValue(a)||a.name.localeCompare(b.name)});list=list.slice(0,50);var prev=new Map();box.querySelectorAll('[data-id]').forEach(function(el){prev.set(el.dataset.id,el.getBoundingClientRect().top)});box.replaceChildren.apply(box,list.map(function(e,i){return lbRow(e,i+1)}));updateLive();if(!reduceMotion())box.querySelectorAll('[data-id]').forEach(function(el,i){var p=prev.get(el.dataset.id);if(p==null)el.animate([{opacity:0,transform:'scale(.9) translateY(8px)'},{opacity:1,transform:'none'}],{duration:420,delay:Math.min(i,8)*45,easing:'cubic-bezier(.34,1.4,.64,1)',fill:'backwards'});else{var dy=p-el.getBoundingClientRect().top;if(Math.abs(dy)>1)el.animate([{transform:'translateY('+dy+'px)'},{transform:'none'}],{duration:500,easing:'cubic-bezier(.34,1.25,.64,1)'})}});var note=$('#lbNote');if(note){if(!DB)note.textContent='The leaderboard is unavailable right now. Your progress is still saved locally.';else if(!accountConnected())note.textContent='You need an account to appear on the leaderboard. You can still view it.';else if(!canWrite)note.textContent='Your account is connected, but syncing is unavailable right now.';else if(list.length<2)note.textContent=lbMode==='xp'?'You are the only account on the XP leaderboard so far.':'You are the only synced person here so far. Get someone else to join the leaderboard.';else note.textContent=''}}
 
 function viewProfile(){var root=h('div',{class:'page'}),xp=totalXp(),lvl=levelOf(xp),av=h('div',{class:'av xl bub',vars:bubVars(S.profile.color)},S.profile.emoji),name=h('input',{class:'field',type:'text',maxlength:20,value:S.profile.name,placeholder:'Your name','aria-label':'Your name',autocomplete:'off'});name.addEventListener('input',function(){S.profile.name=name.value.slice(0,20);touch()});root.append(h('div',{class:'hero'},av,name,h('p',{class:'lvl-title'},'Level '+lvl),h('p',{class:'muted'},fmtXp(xp)+' XP · This is how you appear on the leaderboard.')),h('section',{class:'card group'},h('h2',null,'Your look'),h('div',{class:'emojis',role:'group','aria-label':'Avatar'},EMOJIS.map(function(e){return h('button',{class:'em press','aria-pressed':e===S.profile.emoji,onclick:function(){S.profile.emoji=e;touch();render()}},e)})),h('div',{class:'swatches',role:'radiogroup','aria-label':'Profile colour'},PALETTE.map(function(p){var on=p[0]===S.profile.color;return h('button',{class:'sw bub press',role:'radio','aria-checked':on,vars:bubVars(p[0]),onclick:function(){S.profile.color=p[0];touch();render()}},on?icon('check',22):null)}))),h('section',{class:'card group'},h('h2',null,'Daily goal'),goalSlider()));var total=totalSecs(),best=bestStreak(),badges=[['🌱','First step','Log your first session',total>0],['⏳','One hour','1 hour revised',total>=3600],['📚','Ten hours','10 hours revised',total>=36000],['🏔️','Fifty hours','50 hours revised',total>=180000],['🔥','3 day streak','3 days in a row',best>=3],['⚡','7 day streak','7 days in a row',best>=7]];root.append(h('section',{class:'card group'},h('h2',null,'Badges'),h('div',{class:'badges'},badges.map(function(b){return h('div',{class:'badge'+(b[3]?' on':'')},h('span',{class:'be'},b[0]),h('b',null,b[1]),h('span',{class:'muted'},b[2]))}))),h('section',{class:'card group'},h('h2',null,'How XP works'),h('ul',{class:'rules'},h('li',null,'Timed revision earns '+XP_PER_HOUR+' XP per hour before bonuses.'),h('li',null,'Long uninterrupted sessions earn more: ×1.2 after 30 minutes, ×1.4 after 1 hour and ×1.6 after 2 hours.'),h('li',null,'A new session started within 20 minutes continues your long-session boost. A gap of 20 minutes or more resets the boost.'),h('li',null,'Manual time earns '+Math.round(MANUAL_XP_RATE*100)+'% of the normal XP rate, capped at '+MANUAL_XP_DAILY_CAP+' manual XP per day.'),h('li',null,'Level 2 starts at '+levelStart(2)+' XP, with each new level requiring '+LEVEL_STEP+' XP more than the previous level.'))));root.append(h('section',{class:'card group'},h('h2',null,'Sync across devices'),h('div',{class:'authbox'},h('div',{class:'authrow'},h('div',{class:'authstatus'+(accountConnected()?' ok':''),id:'authStatusText'},h('i'),accountStatusText()),accountConnected()?h('span',{class:'label accountname',id:'authEmail'},'@'+accountDisplayName()):null),accountConnected()?h('button',{class:'smallbtn press',onclick:async function(){if(authBusy)return;authBusy=true;try{await forceLocalSignOut();closeSheet(true);setTimeout(function(){openSyncSheet('login')},80);}finally{authBusy=false}}},'Switch account'):h('div',{class:'authactions'},h('button',{class:'smallbtn primary press',onclick:function(){openSyncSheet('create')}},'Create account'),h('button',{class:'smallbtn press',onclick:function(){openSyncSheet('login')}},'Log in')),h('p',{class:'authhint',id:'authHint'},accountConnected()?'Your leaderboard entry and revision history syncs to this account.':'Create or log into an account to use the same Timetracker identity on another device.'))),h('section',{class:'card group'},h('h2',null,'Your data'),h('p',{class:'muted sync',id:'syncNote'},syncText()),h('button',{class:'btn link press',style:'align-self:flex-start',onclick:openResetSheet},'Delete all my data')));return root}
-function openResetSheet(){openSheet(function(sheet){sheet.append(h('h2',null,'Delete everything?'),h('p',{class:'muted'},'This removes your subjects, revision history, XP and leaderboard entry. It cannot be undone.'),h('div',{class:'actions'},h('button',{class:'btn ghost press',onclick:function(){closeSheet()}},'Keep my data'),h('button',{class:'btn stop press',onclick:async function(){closeSheet();S=defaults();S.updatedAt=Date.now();localSave();tab='home';resetSyncMarkers();shownLevel=1;if(DB&&UID&&canWrite&&accountConnected()){try{await sb.from('tt_state').delete().eq('user_id',UID);await sb.from('tt_board').delete().eq('user_id',UID)}catch(e){}}render(true);toast('All data deleted')}},'Delete everything')))})}
+async function deleteRemoteAccountData(targetUID){
+  if(!sb||!targetUID)return {ok:false,error:new Error('No account is connected.')};
+
+  async function run(){
+    var errors=[];
+
+    var stateDelete=await sb.from('tt_state').delete().eq('user_id',targetUID);
+    if(stateDelete.error)errors.push(stateDelete.error);
+
+    var boardDelete=await sb.from('tt_board').delete().eq('user_id',targetUID);
+    if(boardDelete.error)errors.push(boardDelete.error);
+
+    var followingDelete=await sb.from('tt_follows').delete().eq('follower_id',targetUID);
+    if(followingDelete.error)errors.push(followingDelete.error);
+
+    var followersDelete=await sb.from('tt_follows').delete().eq('following_id',targetUID);
+    if(followersDelete.error)errors.push(followersDelete.error);
+
+    return errors;
+  }
+
+  var errors=await run();
+  if(!errors.length)return {ok:true};
+
+  /* One retry handles transient failures without hiding persistent RLS errors. */
+  await new Promise(function(resolve){setTimeout(resolve,500);});
+  errors=await run();
+  if(errors.length)return {ok:false,error:errors[0],errors:errors};
+  return {ok:true};
+}
+
+function openResetSheet(){
+  openSheet(function(sheet){
+    sheet.append(
+      h('h2',null,'Delete everything?'),
+      h('p',{class:'muted'},'This removes your subjects, revision history, XP, social follows, profile entry and notifications. It does not delete your login account. You can set up the app again afterwards.'),
+      h('div',{class:'actions'},
+        h('button',{class:'btn ghost press',onclick:function(){closeSheet();}},'Keep my data'),
+        h('button',{class:'btn stop press',onclick:async function(){
+          if(authBusy)return;
+          authBusy=true;
+          closeSheet();
+
+          var targetUID=UID,targetEpoch=authEpoch;
+          cancelScheduledSave();
+          authEpoch++;
+          resetSyncMarkers();
+
+          /* Clear the local account data first so the old UI can never remain
+             visible while the remote delete is running. */
+          deleteLocalFor(targetUID);
+          S=defaults();
+          UID=targetUID;
+          isAnonymous=false;
+          canWrite=true;
+          lbDocs=new Map();
+          followedDocs=new Map();
+          socialFollowing=new Set();
+          S.followerSeen={};
+          S.followerBaselineReady=false;
+          S.socialSeen={};
+          shownLevel=1;
+          tab='home';
+
+          var result={ok:true};
+          if(targetUID&&DB) {
+            try{
+              result=await deleteRemoteAccountData(targetUID);
+            }catch(e){
+              result={ok:false,error:e};
+            }
+          }
+
+          localSave();
+          render(true);
+
+          if(result.ok){
+            syncState='synced';
+            toast('All data deleted. Add a subject to set up your account again.');
+          }else{
+            syncState='error';
+            toast('Local data was cleared, but some cloud data could not be deleted. Check your connection and try again.');
+            console.error('Timetracker delete error:',result.error);
+          }
+
+          authBusy=false;
+        }},'Delete everything')
+      )
+    );
+  });
+}
 
 buildNav();initRemote();
 })();
